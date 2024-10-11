@@ -42,6 +42,7 @@ async def handle_audio_stream(websocket, path):
 
 def is_human_speech(audio):
     is_words = detect_speech(audio)
+    return is_words
     if is_words:
         # Call OpenAI API to determine if the detected speech is human or not
         openai_response = check_is_hold_text(audio)

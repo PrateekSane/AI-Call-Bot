@@ -1,18 +1,12 @@
 #!/bin/bash
 
-# Start ngrok for both ports in the background
-ngrok http 3000 > ngrok_3000.log &
-ngrok http 8765 > ngrok_8765.log &
+SESSION_STATUS=$(curl -s http://127.0.0.1:4040/api/tunnels)
 
-# Wait for a few seconds to ensure ngrok has started and forwarded addresses are available
-sleep 5
-
-# Extract forwarding addresses from ngrok logs
-FORWARDING_3000=$(grep -o 'https://[^ ]*' ngrok_3000.log | head -n 1)
-FORWARDING_8765=$(grep -o 'https://[^ ]*' ngrok_8765.log | head -n 1)
-
+# Extract the forwarding addresses from ngrok's output
+FORWARDING_3000=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https" and .config.addr=="http://localhost:3000") | .public_url')
+FORWARDING_8765=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https" and .config.addr=="http://localhost:8765") | .public_url')
 # Check if forwarding addresses were found
-if [[ -z "$FORWARDING_8765" || -z "$FORWARDING_3000" ]]; then
+if [[ -z "$FORWARDING_3000" || -z "$FORWARDING_8765" ]]; then
     echo "Failed to retrieve ngrok forwarding addresses."
     exit 1
 fi
