@@ -10,6 +10,7 @@ app = Flask(__name__)
 # Twilio client setup
 TWILIO_ACCOUNT_SID = os.environ['TWILIO_ACCOUNT_SID']
 TWILIO_AUTH_TOKEN = os.environ['TWILIO_AUTH_TOKEN']
+WEBSOCKET_ADDRESS = os.environ['WEBSOCKET_ADDRESS']
 
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
@@ -23,7 +24,8 @@ def voice():
 
     # Start the media stream and send the audio to your WebSocket server
     start = Start()
-    start.stream(url=f"wss://your-server-url/stream?call_sid={call_sid}") 
+    stream_addr = f"wss://{WEBSOCKET_ADDRESS}/stream?call_sid={call_sid}"
+    start.stream(url=stream_addr)
     resp.append(start)
 
     # Message while monitoring
@@ -66,8 +68,8 @@ def test():
 if __name__ == "__main__":
     # Set up argument parsing
     parser = argparse.ArgumentParser(description='Set ngrok forwarding addresses as environment variables.')
-    parser.add_argument('forwarding_address_8765', type=str, help='Forwarding address for port 8765')
     parser.add_argument('forwarding_address_3000', type=str, help='Forwarding address for port 3000')
+    parser.add_argument('forwarding_address_8765', type=str, help='Forwarding address for port 8765')
     
     args = parser.parse_args()
 
