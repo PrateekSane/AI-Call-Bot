@@ -26,6 +26,10 @@ class Agent:
 
         Please try to get the customer service representative the basic information so that 
         they can help your manager with the issue.
+
+        Make sure to only use the information that is provided to you.
+        Do not make up any information.
+        If you do not know the answer, please say so.
         """
 
         return default_prompt
