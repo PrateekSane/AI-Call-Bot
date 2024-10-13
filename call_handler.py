@@ -27,16 +27,32 @@ twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 def voice():
     """Respond to incoming calls and start audio processing"""
     resp = VoiceResponse()
-    resp.say("Will text when ready")
-    resp.append(Gather(input="speech", timeout=3, action="/process_audio"))
+    print("Starting call")
+    gather = Gather(input="speech", timeout=5, action="/process_audio")
+    gather.say("Will text when ready. Holding")
+    resp.append(gather)
+
     return str(resp)
 
 @app.route("/process_audio", methods=['POST'])
 def process_audio():
     """Process the audio collected from the call"""
-    audio_url = request.values.get('RecordingUrl')
-    
-    if not audio_url:
+    speech_result = request.form.get('SpeechResult')    
+    print("Processing audio")
+    if "stop" in speech_result.lower():
+        response = VoiceResponse()
+        response.say("Ending the call. Goodbye!")
+        response.hangup()
+    else:
+        # Continue gathering input
+        response = VoiceResponse()
+        gather = Gather(input='speech', action='/process_audio', speechTimeout='auto')
+        gather.say("Please say something again.")
+        response.append(gather)
+
+    return str(response)
+    """
+    if not speech_result:
         return voice()  # Continue listening if no audio captured
 
     audio_content = requests.get(audio_url).content
@@ -45,7 +61,7 @@ def process_audio():
     if is_human_speech(audio):
         send_end_hold_alert()
         return hangup()
-    
+    """
     return voice()  # Continue listening if not human speech
 
 def hangup():
@@ -75,6 +91,10 @@ def send_alert(message):
         to=target_number
     )
 
+def file_logger(message):
+    """Write the provided message to a file named test.txt"""
+    with open('test.txt', 'a') as file:
+        file.write(message + '\n')
 
 @app.route("/test", methods=['GET'])
 def test():
