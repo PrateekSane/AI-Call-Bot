@@ -14,9 +14,11 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 FLASK_ADDRESS = os.getenv('FLASK_ADDRESS')
 
 
+'''
 # WebSocket server that handles incoming media streams
 async def handle_audio_stream(websocket, path):
     # Extract the call_sid from the WebSocket URL query parameters
+    print("")
     query_params = parse_qs(urlparse(websocket.path).query)
     call_sid = query_params.get('call_sid', [None])[0]
 
@@ -38,7 +40,8 @@ async def handle_audio_stream(websocket, path):
             print(f"Human speech detected for call_sid {call_sid}! Sending signal to Flask app to hang up the call.")
             
             # Send a POST request to the Flask app to hang up the call
-            requests.post(FLASK_ADDRESS + '/hangup', json={'call_sid': call_sid})
+            #requests.post(FLASK_ADDRESS + '/hangup', json={'call_sid': call_sid})
+'''
 
 def is_human_speech(audio):
     is_words = detect_speech(audio)
@@ -81,9 +84,11 @@ def call_openai_api(transcript):
         return {"is_human": False, "transcript": ""}
 
 
+'''
 # Start the WebSocket server
 if __name__ == '__main__':
     start_server = websockets.serve(handle_audio_stream, "localhost", 8765)
-
+    print("STARTING SERVER")
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
+'''

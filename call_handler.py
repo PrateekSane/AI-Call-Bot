@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify
-from twilio.twiml.voice_response import VoiceResponse, Start
+from twilio.twiml.voice_response import VoiceResponse, Start, Gather
 from twilio.rest import Client
 import os
 import argparse
 import dotenv
+from speech_checker import is_human_speech, AudioSegment, io
+import requests
 
 # Load environment variables from the correct path
 dotenv.load_dotenv('env/.env')
@@ -21,32 +23,38 @@ if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # This route handles the incoming call and streams the audio
-@app.route("/voice", methods=['GET', 'POST'])
+@app.route("/", methods=['GET', 'POST'])
 def voice():
-    """Respond to incoming calls and start media stream"""
+    """Respond to incoming calls and start audio processing"""
     resp = VoiceResponse()
-
-    call_sid = request.values.get('CallSid')
-
-    # Start the media stream and send the audio to your WebSocket server
-    start = Start()
-    stream_addr = f"wss://{WEBSOCKET_ADDRESS}/stream?call_sid={call_sid}"
-    start.stream(url=stream_addr)
-    resp.append(start)
-
-    # Message while monitoring
-    resp.say("Monitoring hold. You will get a text when it's done.")
-
+    resp.say("Will text when ready")
+    resp.append(Gather(input="speech", timeout=3, action="/process_audio"))
     return str(resp)
 
+@app.route("/process_audio", methods=['POST'])
+def process_audio():
+    """Process the audio collected from the call"""
+    audio_url = request.values.get('RecordingUrl')
+    
+    if not audio_url:
+        return voice()  # Continue listening if no audio captured
 
-@app.route("/hangup", methods=['POST'])
+    audio_content = requests.get(audio_url).content
+    audio = AudioSegment.from_file(io.BytesIO(audio_content), format="wav")
+    
+    if is_human_speech(audio):
+        send_end_hold_alert()
+        return hangup()
+    
+    return voice()  # Continue listening if not human speech
+
 def hangup():
     """Hang up the call when speech is detected"""
+    print("Hanging up the call")
     call_sid = request.json.get('call_sid')
     
     if call_sid:
-        send_end_hold_alert()
+        #send_end_hold_alert()
         twilio_client.calls(call_sid).update(status="completed")
         return jsonify({"message": "Call has been hung up."}), 200
     else:
@@ -71,6 +79,7 @@ def send_alert(message):
 @app.route("/test", methods=['GET'])
 def test():
     """A simple test endpoint that returns 'Hello, World!'"""
+
     return "Hello, World!"
 
 if __name__ == "__main__":
