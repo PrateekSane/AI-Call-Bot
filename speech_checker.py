@@ -7,30 +7,43 @@ import io
 import requests
 from urllib.parse import urlparse, parse_qs
 import os
-import openai
+import dotenv
+from openai import OpenAI
 
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
 FLASK_ADDRESS = os.getenv('FLASK_ADDRESS')
 
+dotenv.load_dotenv('env/.env')
 
 def is_human_speech(speech_result: str):
     if not speech_result:
+        # if silence or if the music doesn't have speech
         return False
 
-    system_prompt = "You are an AI assistant that determines if a given text is likely human speech or not."
-    user_prompt = f"Is the following text likely to be human speech? Respond with only 'yes' or 'no': '{speech_result}'"
+    system_prompt = """
+        You are an AI assistant that determines if a 
+        given text from a phone call is talking to a 
+        customer service agent or is just an automated message.
+        """
 
-    #openai_response = call_llm(system_prompt, user_prompt)
-    #is_human = openai_response.choices[0].message['content'].strip().lower() == 'yes'
+    user_prompt = f"""
+        Is the following text likely to be human speech? 
+        Say 'yes' if it is human speech and it is not an automated message.
+        Say 'no' if it is song lyrics or is an automated message.
+        If it is not directly talking to a human, say 'no'.
+        Respond with only 'yes' or 'no': '{speech_result}'
+        """
 
-    is_human = True
+    openai_response = call_llm(system_prompt, user_prompt)
+    #print(openai_response)
+    is_human = openai_response.choices[0].message.content.strip().lower() == 'yes'
+
     return is_human
 
 
 def call_llm(system_prompt: str, user_prompt: str):
     """Call OpenAI API to determine if the speech is human"""
-    response = openai.ChatCompletion.create(
+    client = OpenAI()
+    response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -38,3 +51,10 @@ def call_llm(system_prompt: str, user_prompt: str):
         ]
     )
     return response
+
+
+if __name__ == "__main__":
+    print(is_human_speech("This is Joe from T-Mobile. How can I help you?"))
+    print(is_human_speech("Hi sorry to keep you waiting. Someone will be with you shortly."))
+    print(is_human_speech("Hi sorry to keep you waiting. Someone will be with you shortly."))
+    print(is_human_speech("I cant stop, who going stop me now"))

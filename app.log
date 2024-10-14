@@ -1,10 +1,3 @@
-2024-10-13 20:13:31,253 - INFO - Forwarding addresses set as environment variables:
-2024-10-13 20:13:31,253 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
-2024-10-13 20:13:31,253 - INFO - WEBSOCKET_ADDRESS: https://7786-194-195-93-81.ngrok-free.app
-2024-10-13 20:13:34,483 - INFO - Starting call
-2024-10-13 20:13:38,906 - INFO - Processing audioTest.
-2024-10-13 20:13:44,523 - INFO - Starting call
-2024-10-13 20:13:49,848 - INFO - No speech detected
-2024-10-13 20:13:54,162 - INFO - No speech detected
-2024-10-13 20:13:58,462 - INFO - No speech detected
-2024-10-13 20:14:04,436 - INFO - Processing audioThis is Joe from T-Mobile. How can I help you?
+2024-10-13 21:33:42,813 - INFO - Forwarding addresses set as environment variables:
+2024-10-13 21:33:42,813 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
+2024-10-13 21:33:42,813 - INFO - WEBSOCKET_ADDRESS: https://7786-194-195-93-81.ngrok-free.app
