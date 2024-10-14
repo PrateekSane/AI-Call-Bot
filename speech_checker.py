@@ -20,9 +20,10 @@ def is_human_speech(speech_result: str):
 
     system_prompt = "You are an AI assistant that determines if a given text is likely human speech or not."
     user_prompt = f"Is the following text likely to be human speech? Respond with only 'yes' or 'no': '{speech_result}'"
-    openai_response = call_llm(system_prompt, user_prompt)
 
+    #openai_response = call_llm(system_prompt, user_prompt)
     #is_human = openai_response.choices[0].message['content'].strip().lower() == 'yes'
+
     is_human = True
     return is_human
 

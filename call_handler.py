@@ -29,12 +29,12 @@ def voice():
 @app.route("/process_audio", methods=['POST'])
 def process_audio():
     """Process the audio collected from the call"""
-    speech_result = request.form.get('SpeechResult')    
+    speech_result = request.form.get('SpeechResult')  
     response = VoiceResponse()
 
     if speech_result:
-        logger.info("Processing audio", speech_result)
-        if "stop" in speech_result.lower():
+        logger.info("Processing audio" + speech_result)
+        if is_human_speech(speech_result):
             response.say("Ending the call. Goodbye!")
             response.hangup()
         else:
@@ -62,7 +62,7 @@ def send_alert(message):
     )
 
 def get_voice_gather():
-    return Gather(input='speech', timeout=3, action='/process_audio', speech_timeout=3, actionOnEmptyResult=True)
+    return Gather(input='speech', timeout=3, action='/process_audio', speech_timeout='auto', actionOnEmptyResult=True)
 
 def flush_logger():
     logger.handlers.clear() 
