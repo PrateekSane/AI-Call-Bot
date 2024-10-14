@@ -1,11 +1,3 @@
-import asyncio
-import websockets
-import base64
-#from pydub import AudioSegment
-#from pydub.silence import detect_nonsilent
-import io
-import requests
-from urllib.parse import urlparse, parse_qs
 import os
 import dotenv
 from openai import OpenAI

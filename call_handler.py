@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify
-from twilio.twiml.voice_response import VoiceResponse, Start, Gather
+from flask import Flask, request
+from twilio.twiml.voice_response import VoiceResponse, Gather
 import argparse
 import dotenv
 from speech_checker import is_human_speech
@@ -35,34 +35,45 @@ def process_audio():
     if speech_result:
         logger.info("Processing audio" + speech_result)
         if is_human_speech(speech_result):
-            response.say("Ending the call. Goodbye!")
-            response.hangup()
+            response = complete_call(response)
         else:
             # Continue gathering input
             gather = get_voice_gather()
-            logger.info("Please say something again.")
             response.append(gather)
 
     else:
-        logger.info("No speech detected")
         gather = get_voice_gather()
         response.append(gather)
 
     return str(response)
 
+def complete_call(response):
+    """Complete the call"""
+
+    response.say("Exiting the call. Goodbye!")
+    response.hangup()
+    return str(response)
+
+def call_user_back(response):
+    """Call the user back"""
+    response.say("Calling you back. Please wait.")
+    response.dial(FLASK_ADDRESS)
+    return str(response)
+
 
 def send_alert(message):
     """Send a text alert"""
-    twilio_number = '+12028164470'
-    target_number = '+19164729906'
     twilio_client.messages.create(
         body=message,
-        from_=twilio_number,
-        to=target_number
+        from_=TWILIO_NUMBER,
+        to=TARGET_NUMBER
     )
 
 def get_voice_gather():
-    return Gather(input='speech', timeout=3, action='/process_audio', speech_timeout='auto', actionOnEmptyResult=True)
+    return Gather(input='speech', 
+                  timeout=7, 
+                  action='/process_audio', 
+                  actionOnEmptyResult=True)
 
 def flush_logger():
     logger.handlers.clear() 
@@ -73,26 +84,27 @@ def test():
 
     return "Hello, World!"
 
-if __name__ == "__main__":
-    # Set up argument parsing
+def main():
     run_locally = True
     if run_locally:
         parser = argparse.ArgumentParser(description='Set ngrok forwarding addresses as environment variables.')
         parser.add_argument('forwarding_address_3000', type=str, help='Forwarding address for port 3000')
-        parser.add_argument('forwarding_address_8765', type=str, help='Forwarding address for port 8765')
-        
         args = parser.parse_args()
 
     # Save forwarding addresses as global variables
-    global FLASK_ADDRESS, WEBSOCKET_ADDRESS
+    global FLASK_ADDRESS
     FLASK_ADDRESS = args.forwarding_address_3000
-    WEBSOCKET_ADDRESS = args.forwarding_address_8765
+    
+    global TWILIO_NUMBER, TARGET_NUMBER
+    TWILIO_NUMBER = '+12028164470'
+    TARGET_NUMBER = '+19164729906'
 
     print("Forwarding addresses set as environment variables:")
     print(f"FLASK_ADDRESS: {FLASK_ADDRESS}")
-    print(f"WEBSOCKET_ADDRESS: {WEBSOCKET_ADDRESS}")
     logger.info("Forwarding addresses set as environment variables:")
     logger.info(f"FLASK_ADDRESS: {FLASK_ADDRESS}")
-    logger.info(f"WEBSOCKET_ADDRESS: {WEBSOCKET_ADDRESS}")  
     # Start the Flask app
     app.run(debug=True, port=3000)
+
+if __name__ == "__main__":
+    main()
