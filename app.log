@@ -1,3 +1,8 @@
-2024-10-13 19:43:06,811 - INFO - Forwarding addresses set as environment variables:
-2024-10-13 19:43:06,811 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
-2024-10-13 19:43:06,811 - INFO - WEBSOCKET_ADDRESS: https://7786-194-195-93-81.ngrok-free.app
+2024-10-13 20:08:24,865 - INFO - Forwarding addresses set as environment variables:
+2024-10-13 20:08:24,865 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
+2024-10-13 20:08:24,865 - INFO - WEBSOCKET_ADDRESS: https://7786-194-195-93-81.ngrok-free.app
+2024-10-13 20:08:24,880 - INFO - No speech detected
+2024-10-13 20:08:26,386 - INFO - Starting call
+2024-10-13 20:08:31,686 - INFO - No speech detected
+2024-10-13 20:08:35,962 - INFO - No speech detected
+2024-10-13 20:08:38,345 - INFO - No speech detected

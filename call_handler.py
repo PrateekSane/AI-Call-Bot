@@ -30,17 +30,22 @@ def voice():
 def process_audio():
     """Process the audio collected from the call"""
     speech_result = request.form.get('SpeechResult')    
-    logger.info("Processing audio")
     response = VoiceResponse()
-    logger.info(speech_result)
-    flush_logger()
-    if "stop" in speech_result.lower():
-        response.say("Ending the call. Goodbye!")
-        response.hangup()
+
+    if speech_result:
+        logger.info("Processing audio", speech_result)
+        if "stop" in speech_result.lower():
+            response.say("Ending the call. Goodbye!")
+            response.hangup()
+        else:
+            # Continue gathering input
+            gather = get_voice_gather()
+            logger.info("Please say something again.")
+            response.append(gather)
+
     else:
-        # Continue gathering input
+        logger.info("No speech detected")
         gather = get_voice_gather()
-        gather.say("Please say something again.")
         response.append(gather)
 
     return str(response)
@@ -57,7 +62,7 @@ def send_alert(message):
     )
 
 def get_voice_gather():
-    return Gather(input='speech', timeout=5, action='/process_audio', speech_timeout=3)
+    return Gather(input='speech', timeout=3, action='/process_audio', speech_timeout=3, actionOnEmptyResult=True)
 
 def flush_logger():
     logger.handlers.clear() 
