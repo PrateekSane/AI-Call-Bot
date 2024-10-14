@@ -1,35 +1,27 @@
 from flask import Flask, request, jsonify
 from twilio.twiml.voice_response import VoiceResponse, Start, Gather
-from twilio.rest import Client
-import os
 import argparse
 import dotenv
-from speech_checker import is_human_speech, AudioSegment, io
-import requests
+from speech_checker import is_human_speech
+from utils import setup_logging, setup_twilio
 
 # Load environment variables from the correct path
 dotenv.load_dotenv('env/.env')
 
+# Call the function to set up logging
+logger = setup_logging()
+twilio_client = setup_twilio()
+
 app = Flask(__name__)
-
-# Twilio client setup
-TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-
-# Check if environment variables are loaded correctly
-if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-    raise ValueError("Twilio credentials not found in environment variables.")
-
-twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # This route handles the incoming call and streams the audio
 @app.route("/", methods=['GET', 'POST'])
 def voice():
     """Respond to incoming calls and start audio processing"""
     resp = VoiceResponse()
-    print("Starting call")
-    gather = Gather(input="speech", timeout=5, action="/process_audio")
-    gather.say("Will text when ready. Holding")
+    logger.info("Starting call")
+    gather = get_voice_gather()
+    #gather.say("Will text when ready. Holding")
     resp.append(gather)
 
     return str(resp)
@@ -38,47 +30,20 @@ def voice():
 def process_audio():
     """Process the audio collected from the call"""
     speech_result = request.form.get('SpeechResult')    
-    print("Processing audio")
+    logger.info("Processing audio")
+    response = VoiceResponse()
+    logger.info(speech_result)
+    flush_logger()
     if "stop" in speech_result.lower():
-        response = VoiceResponse()
         response.say("Ending the call. Goodbye!")
         response.hangup()
     else:
         # Continue gathering input
-        response = VoiceResponse()
-        gather = Gather(input='speech', action='/process_audio', speechTimeout='auto')
+        gather = get_voice_gather()
         gather.say("Please say something again.")
         response.append(gather)
 
     return str(response)
-    """
-    if not speech_result:
-        return voice()  # Continue listening if no audio captured
-
-    audio_content = requests.get(audio_url).content
-    audio = AudioSegment.from_file(io.BytesIO(audio_content), format="wav")
-    
-    if is_human_speech(audio):
-        send_end_hold_alert()
-        return hangup()
-    """
-    return voice()  # Continue listening if not human speech
-
-def hangup():
-    """Hang up the call when speech is detected"""
-    print("Hanging up the call")
-    call_sid = request.json.get('call_sid')
-    
-    if call_sid:
-        #send_end_hold_alert()
-        twilio_client.calls(call_sid).update(status="completed")
-        return jsonify({"message": "Call has been hung up."}), 200
-    else:
-        return jsonify({"error": "call_sid not provided."}), 400
-
-
-def send_end_hold_alert():
-    send_alert("Call has been hung up.")
 
 
 def send_alert(message):
@@ -91,10 +56,11 @@ def send_alert(message):
         to=target_number
     )
 
-def file_logger(message):
-    """Write the provided message to a file named test.txt"""
-    with open('test.txt', 'a') as file:
-        file.write(message + '\n')
+def get_voice_gather():
+    return Gather(input='speech', timeout=5, action='/process_audio', speech_timeout=3)
+
+def flush_logger():
+    logger.handlers.clear() 
 
 @app.route("/test", methods=['GET'])
 def test():
@@ -120,6 +86,8 @@ if __name__ == "__main__":
     print("Forwarding addresses set as environment variables:")
     print(f"FLASK_ADDRESS: {FLASK_ADDRESS}")
     print(f"WEBSOCKET_ADDRESS: {WEBSOCKET_ADDRESS}")
-
+    logger.info("Forwarding addresses set as environment variables:")
+    logger.info(f"FLASK_ADDRESS: {FLASK_ADDRESS}")
+    logger.info(f"WEBSOCKET_ADDRESS: {WEBSOCKET_ADDRESS}")  
     # Start the Flask app
     app.run(debug=True, port=3000)
