@@ -6,18 +6,27 @@ def setup_logging():
     log_file = 'app.log'
     logger = logging.getLogger(__name__)
 
-    # Clear any existing handlers (which may include stdout/stderr)
+    # Clear any existing handlers
     logger.handlers.clear()
 
     logger.setLevel(logging.INFO)
 
-    file_handler = logging.FileHandler(log_file, mode='w')
+    # Create file handler
+    file_handler = logging.FileHandler(log_file, mode='w', delay=False)
     file_handler.setLevel(logging.INFO)
 
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
 
+    # Add both handlers to the logger
     logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
     return logger
 

@@ -1,5 +1,5 @@
 from flask import Flask, request
-from twilio.twiml.voice_response import VoiceResponse, Gather
+from twilio.twiml.voice_response import VoiceResponse, Gather, Dial
 import argparse
 import dotenv
 from speech_checker import is_human_speech
@@ -11,6 +11,8 @@ dotenv.load_dotenv('env/.env')
 # Call the function to set up logging
 logger = setup_logging()
 twilio_client = setup_twilio()
+TWILIO_NUMBER = '+12028164470'
+TARGET_NUMBER = '+19164729906'
 
 app = Flask(__name__)
 
@@ -20,9 +22,15 @@ def voice():
     """Respond to incoming calls and start audio processing"""
     resp = VoiceResponse()
     logger.info("Starting call")
-    gather = get_voice_gather()
+    
+    # Start the conference when the call begins
+    dial = Dial()
+    dial.conference('MyConference', start_conference_on_enter=True, end_conference_on_exit=False)
     #gather.say("Will text when ready. Holding")
+    gather = get_voice_gather()
+
     resp.append(gather)
+    resp.append(dial)
 
     return str(resp)
 
@@ -31,7 +39,6 @@ def process_audio():
     """Process the audio collected from the call"""
     speech_result = request.form.get('SpeechResult')  
     response = VoiceResponse()
-
     if speech_result:
         logger.info("Processing audio" + speech_result)
         if is_human_speech(speech_result):
@@ -47,17 +54,48 @@ def process_audio():
 
     return str(response)
 
+@app.route("/join_conference", methods=['GET', 'POST'])
+def join_conference():
+    """TwiML to rejoin the conference when the user is called back"""
+    response = VoiceResponse()
+
+    # Rejoin the user to the existing conference
+    dial = Dial()
+    dial.conference('MyConference', start_conference_on_enter=True, end_conference_on_exit=False)
+    
+    response.append(dial)
+    return str(response)
+
+
 def complete_call(response):
     """Complete the call"""
-
+    logger.info("Completing call")
     response.say("Exiting the call. Goodbye!")
-    response.hangup()
+    call_user_back(response)
+
+    user_picked_up = False 
+    if user_picked_up:
+        logger.info("Bot is leaving the conference")
+        response.leave()
+
     return str(response)
 
 def call_user_back(response):
     """Call the user back"""
-    response.say("Calling you back. Please wait.")
-    response.dial(FLASK_ADDRESS)
+    #response.dial()
+    twilio_client.calls.create(
+        to=TARGET_NUMBER,  # Replace with the user's phone number to call back
+        from_=TWILIO_NUMBER,  # Replace with your Twilio number
+        url=FLASK_ADDRESS + '/join_conference',  # URL to TwiML that rejoins the conference
+        method='POST'
+    )
+    return str(response)
+
+@app.route("/wait", methods=['POST'])
+def make_customer_service_wait():
+    """Make the customer service wait"""
+    response = VoiceResponse()
+    response.say("Thank you for picking up. I am an assistant and will connect you shortly")
     return str(response)
 
 
@@ -73,6 +111,7 @@ def get_voice_gather():
     return Gather(input='speech', 
                   timeout=7, 
                   action='/process_audio', 
+                  speech_timeout=7,
                   actionOnEmptyResult=True)
 
 def flush_logger():
@@ -95,10 +134,6 @@ def main():
     global FLASK_ADDRESS
     FLASK_ADDRESS = args.forwarding_address_3000
     
-    global TWILIO_NUMBER, TARGET_NUMBER
-    TWILIO_NUMBER = '+12028164470'
-    TARGET_NUMBER = '+19164729906'
-
     print("Forwarding addresses set as environment variables:")
     print(f"FLASK_ADDRESS: {FLASK_ADDRESS}")
     logger.info("Forwarding addresses set as environment variables:")
