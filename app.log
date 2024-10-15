@@ -1,5 +1,9 @@
-2024-10-14 15:54:13,317 - INFO - Forwarding addresses set as environment variables:
-2024-10-14 15:54:13,317 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
-2024-10-14 15:56:56,682 - INFO - Starting call
-2024-10-14 15:57:15,996 - INFO - Processing audioHi. This is John, how can I help you?
-2024-10-14 15:57:16,752 - INFO - Completing call
+2024-10-14 17:40:51,128 - INFO - Forwarding addresses set as environment variables:
+2024-10-14 17:40:51,128 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
+2024-10-14 17:40:56,730 - INFO - Starting call
+2024-10-14 17:41:34,122 - INFO - Starting call
+2024-10-14 17:41:53,926 - INFO - Processing audioHi. This is John, how can I help you?
+2024-10-14 17:41:54,610 - INFO - Human speech detected<?xml version="1.0" encoding="UTF-8"?><Response />
+2024-10-14 17:41:54,611 - INFO - Completing call
+2024-10-14 17:41:55,248 - INFO - Human speech detected<?xml version="1.0" encoding="UTF-8"?><Response />
+2024-10-14 17:42:00,639 - INFO - Merging user back into the conference
