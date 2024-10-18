@@ -2,6 +2,15 @@ import os
 from twilio.rest import Client
 import logging
 
+
+def setup_twilio():
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+
+    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    return twilio_client
+
+
 def setup_logging():
     log_file = 'app.log'
     logger = logging.getLogger(__name__)
@@ -30,9 +39,5 @@ def setup_logging():
 
     return logger
 
-def setup_twilio():
-    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-
-    twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    return twilio_client
+twilio_client = setup_twilio()
+logger = setup_logging()

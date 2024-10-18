@@ -2,6 +2,9 @@ import asyncio
 import websockets
 import base64
 import json
+from constants import FLASK_ADDRESS, TWILIO_NUMBER, TARGET_NUMBER
+from utils import twilio_client, logger
+
 
 async def media_stream_handler(websocket, path):
     async for message in websocket:
