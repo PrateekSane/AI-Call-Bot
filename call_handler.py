@@ -2,7 +2,7 @@ from flask import Flask, request
 from twilio.twiml.voice_response import VoiceResponse, Gather, Dial
 import argparse
 import dotenv
-from speech_checker import is_human_speech
+from speech_checker import is_hold_message
 from utils import setup_logging, setup_twilio
 import os
 import requests
@@ -15,44 +15,85 @@ logger = setup_logging()
 twilio_client = setup_twilio()
 TWILIO_NUMBER = '+12028164470'
 TARGET_NUMBER = '+19164729906'
-
+CONFERENCE_NAME = 'my_conference'
 app = Flask(__name__)
 
 @app.route("/", methods=['GET', 'POST'])
-def voice():
+def handle_call():
     """Respond to incoming calls and start audio processing"""
     resp = VoiceResponse()
-    logger.info("Starting call")
-    
-    # Start with a <Dial> verb
-    conference_dial = get_conference_dial(TARGET_NUMBER)
 
-    resp.append(get_voice_gather())
-    resp.append(conference_dial)
+    logger.info("Starting call")
+
+    dial = Dial()
+    dial.conference(
+        'CONFERENCE_NAME',
+        start_conference_on_enter=True, # might be false
+        end_conference_on_exit=False,
+        status_callback='/gather_audio',
+        #status_callback_event='join leave end',
+        status_callback_event='join',
+        status_callback_method='POST'
+    )
+    '''
+    # Start the conference and set statusCallback to monitor participant events
+    dial.conference(
+        ,
+        start_conference_on_enter=True,
+        end_conference_on_exit=False,
+        status_callback='/conference_events',
+        status_callback_event='join leave',
+        status_callback_method='POST'
+    )
+    resp.append(dial)
+    '''
 
     return str(resp)
+
+@app.route("/gather_audio", methods=['POST'])
+def gather_audio():
+    """Handle the gather"""
+    resp = VoiceResponse()
+    resp.append(get_voice_gather())
+    return str(resp)
+
 
 @app.route("/process_audio", methods=['POST'])
 def process_audio():
     """Process the audio collected from the call"""
     speech_result = request.form.get('SpeechResult')  
     response = VoiceResponse()
-    if speech_result:
-        logger.info("Processing audio" + speech_result)
-        if is_human_speech(speech_result):
-            logger.info("Human speech detected" + str(response))
-            response = complete_call(response)
-            logger.info("Human speech detected" + str(response))
+
+    if not speech_result:
+        # no speech detected, continue gathering input
+        gather = get_voice_gather()
+        response.append(gather)
+        return str(response)
+
+    # got speech, process it
+    logger.info("Processing audio" + speech_result)
+    if is_hold_message(speech_result):
+        user_left = True # fix 
+        if user_left:
+            # assuming that the user has already left the call
+            call_instance = twilio_client.calls.create(
+                to=TARGET_NUMBER,
+                from_=TWILIO_NUMBER,
+                url=FLASK_ADDRESS + '/merge_in_user',
+                method='POST'
+            )
+            response.say("Connecting you back")  # unsure if it reaches here
         else:
-            # Continue gathering input
-            gather = get_voice_gather()
-            response.append(gather)
+            # call finish_call through api
+            requests.post(FLASK_ADDRESS + '/finish_call')  # unsure if i need to capture a return value
 
     else:
+        # got speech but wasn't human speech, continue gathering input
         gather = get_voice_gather()
         response.append(gather)
 
     return str(response)
+
 
 @app.route("/merge_in_user", methods=['GET', 'POST'])
 def merge_in_user():
@@ -60,33 +101,28 @@ def merge_in_user():
     response = VoiceResponse()
     logger.info("Merging user back into the conference")
     # Rejoin the user to the existing conference
-    dial = get_conference_dial(TARGET_NUMBER)
+    dial = Dial()
+    dial.conference(
+        'CONFERENCE_NAME',
+        start_conference_on_enter=True,
+        end_conference_on_exit=False,
+        status_callback='/finish_call',
+        #status_callback_event='join leave end',
+        status_callback_event='join',
+        status_callback_method='POST'
+    )
     response.append(dial)
 
-    response.pause(5)
+    return str(response)
+
+@app.route("/finish_call", methods=['GET', 'POST'])
+def finish_call(response):
+    response = VoiceResponse()
 
     response.say("Exiting the call. Goodbye!")
     response.leave()
 
     return str(response)
-
-
-def complete_call(response):
-    """Complete the call"""
-    logger.info("Completing call")
-    call_instance = call_user_back()
-
-    return str(response)
-
-def call_user_back():
-    """Call the user back"""
-    call_instance = twilio_client.calls.create(
-        to=TARGET_NUMBER,
-        from_=TWILIO_NUMBER,
-        url=FLASK_ADDRESS + '/merge_in_user',
-        method='POST'
-    )
-    return call_instance
 
 
 def get_voice_gather():
@@ -95,22 +131,6 @@ def get_voice_gather():
                   action='/process_audio', 
                   speech_timeout=7,
                   actionOnEmptyResult=True)
-
-def get_conference_dial(from_number):
-    dial = Dial()
-    if from_number == TARGET_NUMBER:
-        dial.conference(
-            'InitialConference',
-            start_conference_on_enter=False,
-            end_conference_on_exit=False)
-    else:
-        # Otherwise have the caller join as a regular participant
-        dial.conference(
-            'FinalConference',
-            start_conference_on_enter=True,
-            end_conference_on_exit=False)
-
-    return dial 
 
 
 # @app.route("/wait", methods=['POST'])

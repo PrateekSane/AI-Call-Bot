@@ -6,7 +6,7 @@ FLASK_ADDRESS = os.getenv('FLASK_ADDRESS')
 
 dotenv.load_dotenv('env/.env')
 
-def is_human_speech(speech_result: str):
+def is_hold_message(speech_result: str):
     if not speech_result:
         # if silence or if the music doesn't have speech
         return False
@@ -29,7 +29,7 @@ def is_human_speech(speech_result: str):
     #print(openai_response)
     is_human = openai_response.choices[0].message.content.strip().lower() == 'yes'
 
-    return is_human
+    return not is_human
 
 
 def call_llm(system_prompt: str, user_prompt: str):
@@ -46,7 +46,7 @@ def call_llm(system_prompt: str, user_prompt: str):
 
 
 if __name__ == "__main__":
-    print(is_human_speech("This is Joe from T-Mobile. How can I help you?"))
-    print(is_human_speech("Hi sorry to keep you waiting. Someone will be with you shortly."))
-    print(is_human_speech("Hi sorry to keep you waiting. Someone will be with you shortly."))
-    print(is_human_speech("I cant stop, who going stop me now"))
+    print(is_hold_message("This is Joe from T-Mobile. How can I help you?"))
+    print(is_hold_message("Hi sorry to keep you waiting. Someone will be with you shortly."))
+    print(is_hold_message("Hi sorry to keep you waiting. Someone will be with you shortly."))
+    print(is_hold_message("I cant stop, who going stop me now"))
