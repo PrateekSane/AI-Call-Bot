@@ -1,3 +1,27 @@
-2024-10-16 21:56:57,719 - INFO - Forwarding addresses set as environment variables:
-2024-10-16 21:56:57,719 - INFO - FLASK_ADDRESS: https://260e-194-195-93-81.ngrok-free.app
-2024-10-16 21:57:23,119 - INFO - Starting call
+2024-10-18 14:14:22,329 - INFO - Forwarding addresses set as environment variables:
+2024-10-18 14:14:22,329 - INFO - FLASK_ADDRESS forward to: https://a677-75-26-18-42.ngrok-free.app
+2024-10-18 14:14:22,329 - INFO - WEBSOCKET_ADDRESS forward to: https://d3fd-75-26-18-42.ngrok-free.app
+2024-10-18 14:15:02,876 - INFO - Forwarding addresses set as environment variables:
+2024-10-18 14:15:02,876 - INFO - FLASK_ADDRESS forward to: https://a677-75-26-18-42.ngrok-free.app
+2024-10-18 14:15:02,876 - INFO - WEBSOCKET_ADDRESS forward to: https://d3fd-75-26-18-42.ngrok-free.app
+2024-10-18 14:15:17,978 - INFO - Starting call
+2024-10-18 14:15:18,188 - INFO - Conference Event: participant-join, Caller: None, CallSid: CAcdc4f8f9d833adac896a2eab96f85812
+2024-10-18 14:16:07,749 - INFO - Conference Event: participant-leave, Caller: None, CallSid: CAcdc4f8f9d833adac896a2eab96f85812
+2024-10-18 14:17:26,209 - INFO - Forwarding addresses set as environment variables:
+2024-10-18 14:17:26,209 - INFO - FLASK_ADDRESS forward to: https://a677-75-26-18-42.ngrok-free.app
+2024-10-18 14:17:26,209 - INFO - WEBSOCKET_ADDRESS forward to: https://d3fd-75-26-18-42.ngrok-free.app
+2024-10-18 14:17:30,398 - INFO - Forwarding addresses set as environment variables:
+2024-10-18 14:17:30,399 - INFO - FLASK_ADDRESS forward to: https://a677-75-26-18-42.ngrok-free.app
+2024-10-18 14:17:30,399 - INFO - WEBSOCKET_ADDRESS forward to: https://d3fd-75-26-18-42.ngrok-free.app
+2024-10-18 14:17:36,595 - INFO - Forwarding addresses set as environment variables:
+2024-10-18 14:17:36,595 - INFO - FLASK_ADDRESS forward to: https://a677-75-26-18-42.ngrok-free.app
+2024-10-18 14:17:36,595 - INFO - WEBSOCKET_ADDRESS forward to: https://d3fd-75-26-18-42.ngrok-free.app
+2024-10-18 14:17:46,156 - INFO - Starting call
+2024-10-18 14:17:46,363 - INFO - Conference Event: participant-join, Caller: None, CallSid: CAe51abf3a435062a4533940b28544048e
+2024-10-18 14:17:58,062 - INFO - Conference Event: participant-leave, Caller: None, CallSid: CAe51abf3a435062a4533940b28544048e
+2024-10-18 14:19:35,781 - INFO - Forwarding addresses set as environment variables:
+2024-10-18 14:19:35,781 - INFO - FLASK_ADDRESS forward to: https://a677-75-26-18-42.ngrok-free.app
+2024-10-18 14:19:35,781 - INFO - WEBSOCKET_ADDRESS forward to: https://d3fd-75-26-18-42.ngrok-free.app
+2024-10-18 14:19:46,034 - INFO - Starting call
+2024-10-18 14:19:46,234 - INFO - Conference Event: participant-join, Caller: None, CallSid: CAc9875e7e76beb78707d3a58af309f243
+2024-10-18 14:20:01,912 - INFO - Conference Event: participant-leave, Caller: None, CallSid: CAc9875e7e76beb78707d3a58af309f243

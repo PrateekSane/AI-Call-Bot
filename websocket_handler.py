@@ -1,10 +1,14 @@
+import random
 import asyncio
 import websockets
 import base64
 import json
-from constants import FLASK_ADDRESS, TWILIO_NUMBER, TARGET_NUMBER
+from constants import TWILIO_NUMBER, TARGET_NUMBER, FLASK_ADDRESS
+from speech_checker import is_hold_message
 from utils import twilio_client, logger
-
+from pydub.silence import detect_nonsilent
+from pydub import AudioSegment
+import io
 
 async def media_stream_handler(websocket, path):
     async for message in websocket:
@@ -12,39 +16,40 @@ async def media_stream_handler(websocket, path):
         if msg['event'] == 'media':
             audio_data = msg['media']['payload']
             # Decode and process the audio data
-            if is_human_speech_in_audio(audio_data):
+            if is_hold_message_audio(audio_data):
                 call_user_back()
                 break  # Stop processing if needed
 
-def is_human_speech_in_audio(audio_data):
+def is_hold_message_audio(audio_data):
+    return random.random() < 0.3
     # Decode base64 audio data
     audio_bytes = base64.b64decode(audio_data)
     # Send to speech-to-text API (e.g., Google Cloud Speech-to-Text)
     transcription_text = transcribe_audio(audio_bytes)
-    return is_human_speech(transcription_text)
+    return is_hold_message(transcription_text)
 
 def transcribe_audio(audio_bytes):
-    # Use a speech-to-text API to transcribe the audio
-    # Return the transcription text
-    pass
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="wav")
+    non_silent_ranges = detect_nonsilent(audio, min_silence_len=1000, silence_thresh=-40)
+    return len(non_silent_ranges) > 0  # Return True if non-silent segments are found
 
-def is_human_speech(transcription_text):
-    # Analyze the transcription to detect if a human is speaking
-    # Return True if human speech is detected
-    pass
 
 def call_user_back():
     """Call the user back and merge them into the conference"""
     call = twilio_client.calls.create(
         to=TARGET_NUMBER,
         from_=TWILIO_NUMBER,
-        url=FLASK_ADDRESS + '/user_join_conference',
+        url=FLASK_ADDRESS + '/user_rejoin_conference',
         method='POST'
     )
     return call
 
 
-start_server = websockets.serve(media_stream_handler, '0.0.0.0', 8765, ssl=ssl_context)
+def main():
+    logger.info("starting websocket server")
+    start_server = websockets.serve(media_stream_handler, '0.0.0.0', 8765)
+    asyncio.get_event_loop().run_until_complete(start_server)
+    asyncio.get_event_loop().run_forever()
 
-asyncio.get_event_loop().run_until_complete(start_server)
-asyncio.get_event_loop().run_forever()
+if __name__ == "__main__":
+    main()

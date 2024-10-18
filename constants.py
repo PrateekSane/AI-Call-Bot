@@ -1,3 +1,6 @@
 TWILIO_NUMBER = '+12028164470'
 TARGET_NUMBER = '+19164729906'
 CONFERENCE_NAME = 'my_conference'
+
+FLASK_ADDRESS = 'http://localhost:3000'
+WEBSOCKET_ADDRESS = 'http://localhost:8765'

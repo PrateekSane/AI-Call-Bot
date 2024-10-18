@@ -1,15 +1,10 @@
 from flask import request, Blueprint, g
 from twilio.twiml.voice_response import VoiceResponse, Gather, Dial, Start
-import dotenv
-from speech_checker import is_hold_message
 from utils import logger, twilio_client
 import requests
 from datetime import datetime
-from constants import TWILIO_NUMBER, TARGET_NUMBER, CONFERENCE_NAME
+from constants import TWILIO_NUMBER, TARGET_NUMBER, CONFERENCE_NAME, WEBSOCKET_ADDRESS, FLASK_ADDRESS
 
-
-# Load environment variables from the correct path
-dotenv.load_dotenv('env/.env')
 
 main = Blueprint('main', __name__)
 
@@ -23,6 +18,7 @@ def handle_call():
 
     dial = Dial()
     # Start the conference and set statusCallback to monitor participant events
+    # assume that initially user is already calling someone else
     dial.conference(
         CONFERENCE_NAME,
         start_conference_on_enter=True,
@@ -37,22 +33,38 @@ def handle_call():
 
 @main.route("/conference_events", methods=['POST'])
 def conference_events():
-    event = request.form.get('StatusCallbackEvent')
-    participant_call_sid = request.form.get('CallSid')
-    caller_number = request.form.get('Caller')
-    logger.info(f"Conference Event: {event}, Caller: {caller_number}")
+    params = request.form.to_dict()
+    event = params.get('StatusCallbackEvent')
+    participant_call_sid = params.get('CallSid')
+    caller_number = params.get('From')
+    print(params)
+    logger.info(f"Conference Event: {event}, Caller: {caller_number}, CallSid: {participant_call_sid}")
 
     if event == 'participant-leave':
         if is_user_number(caller_number):
             logger.info("User has left the conference.")
-            # Call the bot to join and monitor
             call_bot()
     elif event == 'participant-join':
+        # if user is joining assume that they have already been in the confrence
         if is_user_number(caller_number):
             logger.info("User has joined the conference.")
             # If the bot is in the conference, remove it
-            remove_bot_from_conference()
+            #remove_bot_from_conference()
+        elif is_bot_number(caller_number):
+            logger.info("Bot has joined the conference.")
+
     return '', 200
+
+def call_bot():
+    """Call the bot and have it join the conference"""
+    call = twilio_client.calls.create(
+        to=TWILIO_NUMBER,  # Bot's number (could be the same as your Twilio number)
+        from_=TWILIO_NUMBER,
+        url=FLASK_ADDRESS + '/bot_join_conference',
+        method='POST'
+    )
+    return call
+
 
 @main.route("/bot_join_conference", methods=['GET', 'POST'])
 def bot_join_conference():
@@ -62,7 +74,7 @@ def bot_join_conference():
     start = Start()
     start.stream(
         name='BotMediaStream',
-        url='wss://your-server.com/media'  # SETUP the websocket server 
+        url= f"wss://{WEBSOCKET_ADDRESS}/media"
     )
     response.append(start)
 
@@ -78,8 +90,8 @@ def bot_join_conference():
     return str(response)
 
 
-@main.route("/user_join_conference", methods=['GET', 'POST'])
-def user_join_conference():
+@main.route("/user_rejoin_conference", methods=['GET', 'POST'])
+def user_rejoin_conference():
     response = VoiceResponse()
     dial = Dial()
     dial.conference(
@@ -89,26 +101,6 @@ def user_join_conference():
     )
     response.append(dial)
     return str(response)
-
-
-@main.route("/finish_call", methods=['GET', 'POST'])
-def finish_call(response):
-    response = VoiceResponse()
-
-    response.say("Exiting the call. Goodbye!")
-    response.leave()
-
-    return str(response)
-
-def call_bot():
-    """Call the bot and have it join the conference"""
-    call = twilio_client.calls.create(
-        to=TWILIO_NUMBER,  # Bot's number (could be the same as your Twilio number)
-        from_=TWILIO_NUMBER,
-        url=g.FLASK_ADDRESS + '/bot_join_conference',
-        method='POST'
-    )
-    return call
 
 def remove_bot_from_conference():
     """Remove the bot from the conference"""
