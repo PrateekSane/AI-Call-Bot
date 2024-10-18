@@ -1,5 +1,5 @@
 from flask import Flask, request
-from twilio.twiml.voice_response import VoiceResponse, Gather, Dial
+from twilio.twiml.voice_response import VoiceResponse, Gather, Dial, Start
 import argparse
 import dotenv
 from speech_checker import is_hold_message
@@ -26,19 +26,9 @@ def handle_call():
     logger.info("Starting call")
 
     dial = Dial()
-    dial.conference(
-        'CONFERENCE_NAME',
-        start_conference_on_enter=True, # might be false
-        end_conference_on_exit=False,
-        status_callback='/gather_audio',
-        #status_callback_event='join leave end',
-        status_callback_event='join',
-        status_callback_method='POST'
-    )
-    '''
     # Start the conference and set statusCallback to monitor participant events
     dial.conference(
-        ,
+        CONFERENCE_NAME,
         start_conference_on_enter=True,
         end_conference_on_exit=False,
         status_callback='/conference_events',
@@ -46,9 +36,25 @@ def handle_call():
         status_callback_method='POST'
     )
     resp.append(dial)
-    '''
 
     return str(resp)
+
+
+@app.route("/conference_events", methods=['POST'])
+def conference_events():
+    event = request.form.get('StatusCallbackEvent')
+    participant_call_sid = request.form.get('CallSid')
+    caller_number = request.form.get('Caller')
+    logger.info(f"Conference Event: {event}, Caller: {caller_number}")
+
+    if event == 'participant-join':
+        if is_user_number(caller_number):
+            logger.info("User has rejoined the conference.")
+            # Instruct the bot to leave
+            remove_bot_from_conference()
+    return '', 200
+
+
 
 @app.route("/gather_audio", methods=['POST'])
 def gather_audio():
@@ -95,6 +101,44 @@ def process_audio():
     return str(response)
 
 
+@app.route("/bot_join_conference", methods=['GET', 'POST'])
+def bot_join_conference():
+    response = VoiceResponse()
+
+    # Start Media Stream to monitor audio
+    start = Start()
+    start.stream(
+        name='BotMediaStream',
+        url='wss://your-server.com/media'  # Your WebSocket server for media streams
+    )
+    response.append(start)
+
+    # Join the conference
+    dial = Dial()
+    dial.conference(
+        CONFERENCE_NAME,
+        start_conference_on_enter=True,
+        end_conference_on_exit=False
+    )
+    response.append(dial)
+
+    return str(response)
+
+
+@app.route("/user_join_conference", methods=['GET', 'POST'])
+def user_join_conference():
+    response = VoiceResponse()
+    dial = Dial()
+    dial.conference(
+        CONFERENCE_NAME,
+        start_conference_on_enter=True,
+        end_conference_on_exit=False
+    )
+    response.append(dial)
+    return str(response)
+
+
+
 @app.route("/merge_in_user", methods=['GET', 'POST'])
 def merge_in_user():
     """TwiML to merge the user back into the conference"""
@@ -133,45 +177,42 @@ def get_voice_gather():
                   actionOnEmptyResult=True)
 
 
-# @app.route("/wait", methods=['POST'])
-# def make_customer_service_wait():
-#     """Make the customer service wait"""
-#     response = VoiceResponse()
-#     response.say("Thank you for picking up. I am an assistant and will connect you shortly")
-#     return str(response)
+def call_bot():
+    """Call the bot and have it join the conference"""
+    call = twilio_client.calls.create(
+        to=TWILIO_NUMBER,  # Bot's number (could be the same as your Twilio number)
+        from_=TWILIO_NUMBER,
+        url=FLASK_ADDRESS + '/bot_join_conference',
+        method='POST'
+    )
+    return call
+
+def remove_bot_from_conference():
+    """Remove the bot from the conference"""
+    # Find the bot's participant SID
+    conferences = twilio_client.conferences.list(
+        friendly_name=CONFERENCE_NAME,
+        status='in-progress'
+    )
+    if conferences:
+        conference_sid = conferences[0].sid
+        participants = twilio_client.conferences(conference_sid).participants.list()
+        for participant in participants:
+            if participant.call_sid != TARGET_NUMBER:
+                # Assuming the bot is the other participant
+                participant.delete()
+                logger.info("Bot has been removed from the conference.")
 
 
-# def send_alert(message):
-#     """Send a text alert"""
-#     twilio_client.messages.create(
-#         body=message,
-#         from_=TWILIO_NUMBER,
-#         to=TARGET_NUMBER
-#     )
+def is_user_number(caller_number):
+    # Normalize numbers if necessary
+    return caller_number == TARGET_NUMBER
 
-# @app.route('/recording_callback', methods=['POST'])
-# def recording_callback():
-#     """Receive recording status and download the recording"""
-#     recording_url = request.form.get('RecordingUrl')
-#     recording_sid = request.form.get('RecordingSid')
 
-#     if recording_url:
-#         logger.info(f"Recording URL received: {recording_url}")
+def is_bot_number(caller_number):
+    # Replace with your bot's number if applicable
+    return caller_number == TWILIO_NUMBER
 
-#         # Construct the local file name
-#         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#         local_filename = os.path.join("/recordings", f"{timestamp}_{recording_sid}.wav")
-
-#         # Download the recording
-#         response = requests.get(recording_url + '.wav')
-#         if response.status_code == 200:
-#             with open(local_filename, 'wb') as f:
-#                 f.write(response.content)
-#             logger.info(f"Recording saved locally as: {local_filename}")
-#         else:
-#             logger.error(f"Failed to download recording: {response.status_code}")
-
-#     return '', 200
 
 @app.route("/test", methods=['GET'])
 def test():
