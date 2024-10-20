@@ -6,6 +6,7 @@ from routes import main
 app = Flask(__name__)
 app.register_blueprint(main)
 
+
 def main():
     run_locally = True
     if run_locally:
@@ -15,7 +16,6 @@ def main():
         
         args = parser.parse_args()
 
-    # Save forwarding addresses as global variables
     print(args.forwarding_address_3000)
     print(args.forwarding_address_8765)
     

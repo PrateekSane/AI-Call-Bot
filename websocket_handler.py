@@ -11,6 +11,7 @@ from pydub import AudioSegment
 import io
 
 async def media_stream_handler(websocket, path):
+    logger.info("Hold message detected. AHHHHHHHHH")
     async for message in websocket:
         msg = json.loads(message)
         if msg['event'] == 'media':
@@ -39,7 +40,7 @@ def call_user_back():
     call = twilio_client.calls.create(
         to=TARGET_NUMBER,
         from_=TWILIO_NUMBER,
-        url=FLASK_ADDRESS + '/user_rejoin_conference',
+        url=FLASK_ADDRESS + '/merge_calls',
         method='POST'
     )
     return call
