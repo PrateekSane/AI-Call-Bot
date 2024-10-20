@@ -8,7 +8,7 @@ from constants import TWILIO_NUMBER, TARGET_NUMBER, CONFERENCE_NAME, WEBSOCKET_A
 CUSTOMER_SERVICE_NUMBER = '+14692105627'
 
 main = Blueprint('main', __name__)
-number_to_sid = {}
+sid_to_number = {}
 caller_join_count = {}
 
 @main.route("/", methods=['GET', 'POST'])
@@ -18,9 +18,10 @@ def handle_call():
 
     logger.info("Starting call")
 
-    number_to_sid[TARGET_NUMBER] = request.form.get('CallSid')
+    parent_call_sid = request.values.get('CallSid')
+    sid_to_number[parent_call_sid] = TARGET_NUMBER
 
-    logger.info(f"User CallSid: {number_to_sid[TARGET_NUMBER]}")
+    logger.info(f"User CallSid: {parent_call_sid}")
 
     # Dial the customer service number with action to handle call end
     dial = Dial(
@@ -41,11 +42,14 @@ def handle_call():
 
 @main.route("/dial_events", methods=["GET", 'POST'])
 def dial_events():
-    params = request.form.to_dict()
+    params = request.values.to_dict()
     dial_call_sid = params.get('CallSid')
+    parent_call_sid = params.get('ParentCallSid')
     dial_call_status = params.get('CallStatus')
+    called_number = params.get('Called')
 
-    number_to_sid[CUSTOMER_SERVICE_NUMBER] = dial_call_sid
+    if dial_call_sid not in sid_to_number:
+        sid_to_number[dial_call_sid] = called_number 
 
     logger.info(f"Dial Event: DialCallSid: {dial_call_sid}, DialCallStatus: {dial_call_status}")
 
@@ -55,43 +59,38 @@ def dial_events():
         logger.info("Dial ringing")
     elif dial_call_status == 'in-progress':
         logger.info("Dial answered")
-        if dial_call_sid:
-            merge_calls_into_conference(number_to_sid[TARGET_NUMBER], dial_call_sid)
+        # if dial_call_sid:
+        merge_calls_into_conference((dial_call_sid, parent_call_sid))
     elif dial_call_status == 'completed':
         logger.info("Dial completed")
 
     return '', 200
 
 
-def merge_calls_into_conference(user_call_sid, customer_service_call_sid):
+def merge_calls_into_conference(call_sids):
     """Redirect both call legs into a conference"""
     # Redirect the customer service call into the conference
     # need to make less boof
     # has to be first otherwise cuts out
-    if customer_service_call_sid:
+    if not call_sids:
+        logger.error("User CallSid not found")
+        return
+
+    logger.info(f"Merging calls into conference")
+    for call_sid in call_sids:
         try:
-            call = twilio_client.calls(customer_service_call_sid).fetch()
+            call = twilio_client.calls(call_sid).fetch()
             if call.status in ['in-progress', 'ringing', 'queued']:
-                twilio_client.calls(customer_service_call_sid).update(
+                print("CALL STATUS" + call.status)
+                twilio_client.calls(call_sid).update(
                     url=FLASK_ADDRESS + '/join_conference',
                     method='POST'
                 )
-                logger.info("Customer service call redirected to conference")
+                logger.info("Call redirected to conference " + call_sid)
             else:
-                logger.error(f"Customer service call cannot be redirected. Current status: {call.status}")
+                logger.error(f"Call cannot be redirected. Current status: {call.status}")
         except Exception as e:
-                logger.error(f"Error redirecting customer service call: {e}")
-
-    # Redirect the user's call into the conference
-    logger.info(f"Merging calls into conference")
-    if user_call_sid:
-        twilio_client.calls(user_call_sid).update(
-            url=FLASK_ADDRESS + '/join_conference',
-            method='POST'
-        )
-        logger.info("User call redirected to conference")
-    else:
-        logger.error("User CallSid not found")
+                logger.error(f"Error redirecting service call for {call_sid}: {e}")
 
 @main.route("/join_conference", methods=['GET', 'POST'])
 def join_conference():
@@ -115,7 +114,7 @@ def conference_events():
     params = request.form.to_dict()
     event = params.get('StatusCallbackEvent')
     participant_call_sid = params.get('CallSid')
-    caller_number = next((key for key, value in number_to_sid.items() if value == participant_call_sid), None)
+    caller_number = sid_to_number[participant_call_sid] 
     caller_join_count[caller_number] = caller_join_count.get(caller_number, 0) + 1
     logger.info(f"Conference Event: {event}, Caller: {caller_number}, CallSid: {participant_call_sid}")
 
@@ -130,11 +129,8 @@ def conference_events():
         if is_user_number(caller_number):
             # assuming that user was already in the conference and is now rejoining
             logger.info("User has joined the conference.")
-            """
             if caller_join_count[caller_number] == 2:
                 remove_bot_from_conference()
-            """
-            remove_bot_from_conference()
         elif is_customer_service_number(caller_number):
             logger.info("Customer service has joined the conference.")
         elif is_bot_number(caller_number):

@@ -22,6 +22,7 @@ async def media_stream_handler(websocket, path):
                 break  # Stop processing if needed
 
 def is_hold_message_audio(audio_data):
+    return False
     return random.random() < 0.3
     # Decode base64 audio data
     audio_bytes = base64.b64decode(audio_data)
@@ -40,7 +41,7 @@ def call_user_back():
     call = twilio_client.calls.create(
         to=TARGET_NUMBER,
         from_=TWILIO_NUMBER,
-        url=FLASK_ADDRESS + '/merge_calls',
+        url=FLASK_ADDRESS + '/join_conference',
         method='POST'
     )
     return call

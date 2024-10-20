@@ -15,9 +15,6 @@ def main():
         parser.add_argument('forwarding_address_8765', type=str, help='Forwarding address for port 8765')
         
         args = parser.parse_args()
-
-    print(args.forwarding_address_3000)
-    print(args.forwarding_address_8765)
     
     logger.info("Forwarding addresses set as environment variables:")
     logger.info(f"FLASK_ADDRESS forward to: {args.forwarding_address_3000}")
