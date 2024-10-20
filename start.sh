@@ -16,4 +16,4 @@ echo "Forwarding address for port 3000: $FORWARDING_3000"
 echo "Forwarding address for port 8765: $FORWARDING_8765"
 
 # Call the Python script with the forwarding addresses as arguments
-python call_handler.py "$FORWARDING_3000" "$FORWARDING_8765"
+python main.py "$FORWARDING_3000" "$FORWARDING_8765"
