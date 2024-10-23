@@ -52,19 +52,15 @@ def handle_call():
 
 @main.route("/dial_events", methods=['POST'])
 def dial_events():
-    resp = VoiceResponse()    
-
     params = request.form.to_dict()
     child_call_sid = params.get('CallSid')
     child_call_status = params.get('CallStatus')
-    child_call_number = params.get('CallNumber') 
 
-    logger.info(f"Call Answered by {child_call_number}, {child_call_status}")
     if child_call_sid and child_call_status == 'in-progress':
+        logger.info(f"Call in progress with child: {child_call_sid}")
         call_handler.set_number_sid(child_call_sid, CUSTOMER_SERVICE_NUMBER)
-        resp.redirect('/join_conference')
 
-    return resp 
+    return '', 200 
 
 @main.route("/join_conference", methods=['GET', 'POST'])
 def join_conference():
