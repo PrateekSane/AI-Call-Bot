@@ -40,6 +40,30 @@ def setup_logging():
 
     return logger
 
+import requests
+import time
+
+def get_ngrok_url():
+    url = "http://127.0.0.1:4040/api/tunnels"
+    max_retries = 5
+    retries = 0
+    while retries < max_retries:
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                for tunnel in data['tunnels']:
+                    if tunnel['proto'] == 'https':
+                        public_url = tunnel['public_url']
+                        return public_url
+            time.sleep(1)
+            retries += 1
+        except requests.exceptions.ConnectionError:
+            # ngrok might not be ready yet
+            time.sleep(1)
+            retries += 1
+    raise Exception("ngrok URL not found. Is ngrok running?")
+
 
 # Create an SSL context
 #ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
