@@ -25,8 +25,9 @@ def handle_call():
 
     # Has to be in the same function as calling customer service  
     dial = Dial(
-        action=FLASK_ADDRESS + '/join_conference',
+        action='/join_conference',
         method='POST',
+        caller_id=TWILIO_NUMBER 
     )
     dial.number(
         CUSTOMER_SERVICE_NUMBER,
@@ -34,20 +35,8 @@ def handle_call():
         status_callback_event='initiated ringing answered completed',
         status_callback_method='POST'
     )
-    # dial.conference(
-    #     CONFERENCE_NAME,
-    #     start_conference_on_enter=True,
-    #     end_conference_on_exit=False,
-    #     status_callback='/conference_events',
-    #     status_callback_event='start end join leave',
-    #     status_callback_method='POST'
-    # )
-    # resp.append(dial)
-
-    # # Dial the customer service number into the same conference
-    # cst_sv_leg_call_sid = call_handler.dial_customer_service()
-
     resp.append(dial)
+    print(str(resp))
     return str(resp)
 
 @main.route("/dial_events", methods=['POST'])
@@ -55,10 +44,18 @@ def dial_events():
     params = request.form.to_dict()
     child_call_sid = params.get('CallSid')
     child_call_status = params.get('CallStatus')
-
-    if child_call_sid and child_call_status == 'in-progress':
-        logger.info(f"Call in progress with child: {child_call_sid}")
+    logger.info(f"Call {child_call_status} with child: {child_call_sid}")
+        
+    
+    if child_call_status == 'initiated':
+        logger.info("Dial initiated")
+    elif child_call_status == 'ringing':
+        logger.info("Dial ringing")
+    elif child_call_status == 'in-progress':
         call_handler.set_number_sid(child_call_sid, CUSTOMER_SERVICE_NUMBER)
+        call_handler.add_call_to_conference(child_call_sid)
+    elif child_call_status == 'completed':
+        logger.info("Dial completed")
 
     return '', 200 
 
@@ -68,7 +65,7 @@ def join_conference():
     resp = VoiceResponse()
     dial = Dial()
     dial.conference(
-        CONFERENCE_NAME,
+        "ABCDE",  # has to be unique
         start_conference_on_enter=True,
         end_conference_on_exit=False,
         status_callback='/conference_events',

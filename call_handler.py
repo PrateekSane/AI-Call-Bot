@@ -2,9 +2,11 @@ from utils import logger
 from constants import TWILIO_NUMBER, TARGET_NUMBER, CUSTOMER_SERVICE_NUMBER, FLASK_ADDRESS, CONFERENCE_NAME
 
 
+
 class CallHandler:
     def __init__(self, twilio_client):
         self.twilio_client = twilio_client
+        conference = twilio_client.conferences('CF4416d17559a35a6428d83c1e6e1a903c').update(status='completed')
 
         self.sid_to_number = {}
         self.caller_join_count = {}
@@ -29,6 +31,12 @@ class CallHandler:
     #         return call.sid 
     #     except Exception as e:
     #         logger.error(f"Error dialing customer service: {e}")
+
+    def add_call_to_conference(self, sid):
+        self.twilio_client.calls(sid).update(
+            url=FLASK_ADDRESS + '/join_conference',
+            method='POST'
+        )
 
     def start_bot_listening(self):
         # BEFORE MAKING WORK MAKE SURE THERE IS ABILITY TO END THE CALL
