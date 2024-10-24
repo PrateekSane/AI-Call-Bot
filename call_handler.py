@@ -6,7 +6,6 @@ from constants import TWILIO_NUMBER, TARGET_NUMBER, CUSTOMER_SERVICE_NUMBER, FLA
 class CallHandler:
     def __init__(self, twilio_client):
         self.twilio_client = twilio_client
-        conference = twilio_client.conferences('CF4416d17559a35a6428d83c1e6e1a903c').update(status='completed')
 
         self.sid_to_number = {}
         self.caller_join_count = {}
@@ -38,7 +37,7 @@ class CallHandler:
             method='POST'
         )
 
-    def start_bot_listening(self):
+    def start_bot_listening(self, call_sid):
         # BEFORE MAKING WORK MAKE SURE THERE IS ABILITY TO END THE CALL
         call = self.twilio_client.calls(call_sid).update(
             url=FLASK_ADDRESS + '/listening_bot_join_conference',
@@ -97,7 +96,7 @@ class CallHandler:
         
         return number == TWILIO_NUMBER
 
-    def is_customer_service_number(caller_number):
+    def is_customer_service_number(self, caller_number):
         return caller_number == CUSTOMER_SERVICE_NUMBER
 
     def print_people_in_conference(self):

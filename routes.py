@@ -79,17 +79,20 @@ def join_conference():
 def conference_events():
     params = request.form.to_dict()
     event = params.get('StatusCallbackEvent')
+    if event == 'conference-start' or event == 'conference-end':
+        logger.info(' '.join(event.split('-')) + 'ing')
+        return '', 200
+
     participant_call_sid = params.get('CallSid')
 
-    logger.info(f"Conference Event: {event}, CallSid: {participant_call_sid}, event: {event}")
     caller_number = call_handler.get_number_from_sid(participant_call_sid)
-    logger.info(f"CALLER NUMBER: {caller_number}")
     call_handler.increment_caller_join_count(participant_call_sid)
+    logger.info(f"Conference Event: {event}, CallSid: {participant_call_sid}, CALLER NUMBER: {caller_number}")
 
     if event == 'participant-join':
         if call_handler.is_user_number(caller_number):
             logger.info("User has joined the conference.")
-            # assuming that user was already in the conference and is now rejoining
+            # if that user was already in the conference and is now rejoining
             if call_handler.get_caller_join_count(participant_call_sid) == 2:
                 call_handler.remove_bot_from_conference()
         elif call_handler.is_bot_number(caller_number):
