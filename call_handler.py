@@ -15,31 +15,43 @@ class CallHandler:
         self.sid_to_number = {}
         self.caller_join_count = {}
 
-    # def dial_customer_service(self):
-    #     """Dial customer service number and join the conference"""
-    #     try:
-    #         call = self.twilio_client.calls.create(
-    #             to=CUSTOMER_SERVICE_NUMBER,
-    #             from_=TWILIO_NUMBER,
-    #             url=FLASK_ADDRESS + '/join_conference',
-    #             method='POST'
-    #         )
-    #         self.set_number_sid(CUSTOMER_SERVICE_NUMBER, call.sid)
-    #         logger.info(f"Dialed customer service: {call.sid}")
-
-    #         return call.sid 
-    #     except Exception as e:
-    #         logger.error(f"Error dialing customer service: {e}")
-
     def add_call_to_conference(self, sid):
         self.twilio_client.calls(sid).update(
             url=FLASK_ADDRESS + '/join_conference',
             method='POST'
         )
 
+    def handle_conference_join(self, sid):
+        self.increment_caller_join_count(sid)
+
+        if self.is_user_number(sid):
+            logger.info("User has joined the conference.")
+            # if that user was already in the conference and is now rejoining
+            if self.get_caller_join_count(sid) == 2:
+                self.remove_bot_from_conference()
+        elif self.is_bot_number(sid):
+            logger.info("Bot has joined the conference.")
+        elif self.is_customer_service_number(sid):
+            logger.info("Customer service has joined the conference.")
+        else:
+            logger.info(f"number not recognized {sid} {self.get_number_from_sid(sid)}")
+
+    def handle_conference_leave(self, sid):
+        # If person leaves, call the bot to join the conference
+        customer_service_holding = False
+        if self.is_user_number(sid):
+            if customer_service_holding:
+                self.start_bot_listening(sid)
+                logger.info("Starting the listening bot")
+            logger.info("User has left the conference")
+        elif self.is_customer_service_number(sid):
+            logger.info("Customer service has left the conference.")
+        else:
+            logger.info(f"number not recognized {sid} {self.get_number_from_sid(sid)}")
+
     def start_bot_listening(self, call_sid):
         # BEFORE MAKING WORK MAKE SURE THERE IS ABILITY TO END THE CALL
-        call = self.twilio_client.calls(call_sid).update(
+        self.twilio_client.calls(call_sid).update(
             url=FLASK_ADDRESS + '/listening_bot_join_conference',
             method='POST'
         )
@@ -81,23 +93,26 @@ class CallHandler:
                     return True
         return False
 
-    def is_user_number(self, caller_number):
-        # Normalize numbers if necessary
-        return caller_number == TARGET_NUMBER
+    def is_user_number(self, sid):
+        number = self.get_number_from_sid(sid)
+        if not number:
+            return False
+        
+        return number == TARGET_NUMBER 
 
-    def is_bot_number(self, caller_number):
-        # Replace with your bot's number if applicable
-        return caller_number == TWILIO_NUMBER
-
-    def is_bot_from_sid(self, sid):
+    def is_bot_number(self, sid):
         number = self.get_number_from_sid(sid)
         if not number:
             return False
         
         return number == TWILIO_NUMBER
 
-    def is_customer_service_number(self, caller_number):
-        return caller_number == CUSTOMER_SERVICE_NUMBER
+    def is_customer_service_number(self, sid):
+        number = self.get_number_from_sid(sid)
+        if not number:
+            return False
+        
+        return number == CUSTOMER_SERVICE_NUMBER 
 
     def print_people_in_conference(self):
         conferences = self.twilio_client.conferences.list()
