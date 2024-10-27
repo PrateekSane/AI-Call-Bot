@@ -9,7 +9,9 @@ class CallHandler:
 
         self.sid_to_number = {}
         self.caller_join_count = {}
-        self.active_call_sid = None
+
+        self.parent_call_sid = None
+        self.child_call_sids = []
 
     def reset(self):
         self.sid_to_number = {}
@@ -23,10 +25,12 @@ class CallHandler:
 
     def handle_conference_join(self, sid):
         self.increment_caller_join_count(sid)
+        print(self.get_participants_in_conference())
 
         if self.is_user_number(sid):
             logger.info("User has joined the conference.")
             # if that user was already in the conference and is now rejoining
+            # TODO: if they leave, join, leave, join back
             if self.get_caller_join_count(sid) == 2:
                 self.remove_bot_from_conference()
         elif self.is_bot_number(sid):
@@ -38,10 +42,13 @@ class CallHandler:
 
     def handle_conference_leave(self, sid):
         # If person leaves, call the bot to join the conference
-        customer_service_holding = False
+        # TODO: CHECK IF THE CUSTOMER SERVICE STILL IN THE CALL
+
+        print(self.get_participants_in_conference())
+        customer_service_holding = True 
         if self.is_user_number(sid):
             if customer_service_holding:
-                self.start_bot_listening(sid)
+                self.start_bot_listening(self.child_call_sid)
                 logger.info("Starting the listening bot")
             logger.info("User has left the conference")
         elif self.is_customer_service_number(sid):
@@ -50,11 +57,18 @@ class CallHandler:
             logger.info(f"number not recognized {sid} {self.get_number_from_sid(sid)}")
 
     def start_bot_listening(self, call_sid):
-        # BEFORE MAKING WORK MAKE SURE THERE IS ABILITY TO END THE CALL
         self.twilio_client.calls(call_sid).update(
             url=FLASK_ADDRESS + '/listening_bot_join_conference',
             method='POST'
         )
+
+    def set_parent_call_sid(self, parent_call_sid, number):
+        self.parent_call_sid = parent_call_sid
+        self.set_number_sid(parent_call_sid, number)
+    
+    def set_child_call_sid(self, child_call_sid, number):
+        self.child_call_sid = child_call_sid
+        self.set_number_sid(child_call_sid, number)
 
     def set_number_sid(self, sid, number):
         self.sid_to_number[sid] = number
@@ -118,3 +132,11 @@ class CallHandler:
         conferences = self.twilio_client.conferences.list()
         participants = self.twilio_client.conferences(conferences[0].sid).participants.list()
         logger.info(f"conference participants: {participants}")
+    
+    def get_participants_in_conference(self):
+        conferences = self.twilio_client.conferences.list()
+        participants = self.twilio_client.conferences(conferences[0].sid).participants.list()
+        for participant in participants:
+            if participant.moderator:
+                print(f"Moderator: {participant.call_sid}")
+        return participants

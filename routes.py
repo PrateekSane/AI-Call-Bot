@@ -15,11 +15,12 @@ def handle_call():
     """Respond to incoming calls and start audio processing"""
     resp = VoiceResponse()
     #call_handler.reset()
+    # TODO: NEED TO FIGURE OUT  how to handle multiple calls at once cleanly
 
     logger.info("Starting call")
 
     parent_call_sid = request.values.get('CallSid')
-    call_handler.set_number_sid(parent_call_sid, TARGET_NUMBER)
+    call_handler.set_parent_call_sid(parent_call_sid, TARGET_NUMBER)
 
     logger.info(f"User CallSid: {parent_call_sid}")
 
@@ -27,7 +28,7 @@ def handle_call():
     dial = Dial(
         action='/join_conference',
         method='POST',
-        caller_id=TWILIO_NUMBER 
+        caller_id=TARGET_NUMBER 
     )
     dial.number(
         CUSTOMER_SERVICE_NUMBER,
@@ -45,8 +46,9 @@ def dial_events():
     child_call_sid = params.get('CallSid')
     child_call_status = params.get('CallStatus')
     logger.info(f"Call {child_call_status} with child: {child_call_sid}")
+
+    call_handler.set_child_call_sid(child_call_sid, CUSTOMER_SERVICE_NUMBER)
         
-    
     if child_call_status == 'initiated':
         logger.info("Dial initiated")
     elif child_call_status == 'ringing':
@@ -56,7 +58,7 @@ def dial_events():
         call_handler.add_call_to_conference(child_call_sid)
     elif child_call_status == 'completed':
         logger.info("Dial completed")
-
+        
     return '', 200 
 
 @main.route("/join_conference", methods=['GET', 'POST'])
@@ -65,7 +67,7 @@ def join_conference():
     resp = VoiceResponse()
     dial = Dial()
     dial.conference(
-        "ABCDE",  # has to be unique
+        "ABCDE",  # TODO: has to be unique otherwise you hear the aids
         start_conference_on_enter=True,
         end_conference_on_exit=False,
         status_callback='/conference_events',
@@ -87,11 +89,12 @@ def conference_events():
     participant_call_sid = params.get('CallSid')
     caller_number = call_handler.get_number_from_sid(participant_call_sid)
 
-    logger.info(f"Conference Event: {event}, CallSid: {participant_call_sid}, CALLER NUMBER: {caller_number}")
+    logger.info(f"Conference Event: {event}, CALLER NUMBER: {caller_number}, CallSid: {participant_call_sid}")
 
     if event == 'participant-join':
         call_handler.handle_conference_join(participant_call_sid)
     elif event == 'participant-leave':
+        print("USER LEFT BECAUSE", params.get('ReasonParticipantLeft', 'Unknown'))
         call_handler.handle_conference_leave(participant_call_sid)
     return '', 200
 
