@@ -10,5 +10,5 @@ tunnels:
 
   websocket:
     proto: http # Use 'ws' for WebSocket or 'wss' for secure WebSocket
-    addr: 8765 # Port of your WebSocket server
+    addr: 8100 # Port of your WebSocket server
     inspect: true # Enable inspection of requests

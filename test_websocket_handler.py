@@ -1,9 +1,10 @@
 import asyncio
 import websockets
 import json
+from constants import WEBSOCKET_ADDRESS
 
 async def test_websocket():
-    uri = "ws://localhost:8765"  # Ensure this matches the server's address and port
+    uri = f"wss://{WEBSOCKET_ADDRESS}"
     async with websockets.connect(uri) as websocket:
         # Create a test message
         test_message = {
@@ -16,6 +17,7 @@ async def test_websocket():
         await websocket.send(json.dumps(test_message))
         print("Test message sent")
 
-# Run the test
-asyncio.get_event_loop().run_until_complete(test_websocket())
+# Run the test using asyncio.run()
+if __name__ == "__main__":
+    asyncio.run(test_websocket())
 

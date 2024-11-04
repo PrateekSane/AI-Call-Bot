@@ -23,7 +23,7 @@ async def media_stream_handler(websocket, path):
 
 def is_hold_message_audio(audio_data):
     return False
-    return random.random() < 0.3
+    # return random.random() < 0.3
     # Decode base64 audio data
     audio_bytes = base64.b64decode(audio_data)
     # Send to speech-to-text API (e.g., Google Cloud Speech-to-Text)
@@ -49,7 +49,10 @@ def call_user_back():
 
 def main():
     logger.info("starting websocket server")
-    start_server = websockets.serve(media_stream_handler, '0.0.0.0', 8765)
+    # start_server = websockets.serve(media_stream_handler, '0.0.0.0', 8200)
+    start_server = websockets.serve(
+        media_stream_handler, '0.0.0.0', 8100,origins=None
+    )
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
 

@@ -2,7 +2,7 @@ TWILIO_NUMBER = '+12028164470'
 TARGET_NUMBER = '+19164729906'
 CUSTOMER_SERVICE_NUMBER = '+14692105627'
 
-CONFERENCE_NAME = 'my_conference'
+CONFERENCE_NAME = 'applebanana'
 
-FLASK_ADDRESS = 'https://a558-2001-5a8-42a8-7b00-dc97-9960-3550-1eb4.ngrok-free.app'
-WEBSOCKET_ADDRESS = 'https://a212-2001-5a8-42a8-7b00-dc97-9960-3550-1eb4.ngrok-free.app'
+FLASK_ADDRESS = 'https://90b4-2001-5a8-42a8-7b00-314d-188d-b367-a57c.ngrok-free.app'
+WEBSOCKET_ADDRESS = 'https://0ff3-2001-5a8-42a8-7b00-314d-188d-b367-a57c.ngrok-free.app'

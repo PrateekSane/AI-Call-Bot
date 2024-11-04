@@ -10,56 +10,54 @@ from call_handler import CallHandler
 main = Blueprint('main', __name__)
 call_handler = CallHandler(twilio_client)
 
-@main.route("/", methods=['GET', 'POST'])
-def handle_call():
-    """Respond to incoming calls and start audio processing"""
-    resp = VoiceResponse()
-    #call_handler.reset()
-    # TODO: NEED TO FIGURE OUT  how to handle multiple calls at once cleanly
 
-    logger.info("Starting call")
-
-    parent_call_sid = request.values.get('CallSid')
-    call_handler.set_parent_call_sid(parent_call_sid, TARGET_NUMBER)
-
-    logger.info(f"User CallSid: {parent_call_sid}")
-
-    # Has to be in the same function as calling customer service  
-    dial = Dial(
-        action='/join_conference',
-        method='POST',
-        caller_id=TARGET_NUMBER 
-    )
-    dial.number(
-        CUSTOMER_SERVICE_NUMBER,
-        status_callback='/dial_events',
-        status_callback_event='initiated ringing answered completed',
+@main.route("/start_call", methods=['POST'])
+def start_call():
+    """Initiate calls to the user and customer service, and put them in a conference"""
+    bot_call = twilio_client.calls.create(
+        to=TWILIO_NUMBER,
+        from_=TWILIO_NUMBER,
+        url=FLASK_ADDRESS + '/listening_bot_join_conference',
+        status_callback=FLASK_ADDRESS + '/dial_events',
+        status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
         status_callback_method='POST'
     )
-    resp.append(dial)
-    print(str(resp))
-    return str(resp)
+
+    user_call = twilio_client.calls.create(
+        to=TARGET_NUMBER,
+        from_=TWILIO_NUMBER,
+        url=FLASK_ADDRESS + '/join_conference',
+        status_callback=FLASK_ADDRESS + '/dial_events',
+        status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
+        status_callback_method='POST'
+    )
+
+    # Initiate call to customer service
+    customer_service_call = twilio_client.calls.create(
+        to=CUSTOMER_SERVICE_NUMBER,
+        from_=TWILIO_NUMBER,
+        url=FLASK_ADDRESS + '/join_conference',
+        status_callback=FLASK_ADDRESS + '/dial_events',
+        status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
+        status_callback_method='POST'
+    )
+
+    # Store call SIDs
+    call_handler.set_parent_call_sid(user_call.sid, TARGET_NUMBER)
+    call_handler.set_child_call_sid(customer_service_call.sid, CUSTOMER_SERVICE_NUMBER)
+    call_handler.set_bot_call_sid(bot_call.sid, TWILIO_NUMBER)
+
+    return 'Calls initiated', 200
+
 
 @main.route("/dial_events", methods=['POST'])
 def dial_events():
     params = request.form.to_dict()
-    child_call_sid = params.get('CallSid')
-    child_call_status = params.get('CallStatus')
-    logger.info(f"Call {child_call_status} with child: {child_call_sid}")
-
-    call_handler.set_child_call_sid(child_call_sid, CUSTOMER_SERVICE_NUMBER)
-        
-    if child_call_status == 'initiated':
-        logger.info("Dial initiated")
-    elif child_call_status == 'ringing':
-        logger.info("Dial ringing")
-    elif child_call_status == 'in-progress':
-        call_handler.set_number_sid(child_call_sid, CUSTOMER_SERVICE_NUMBER)
-        call_handler.add_call_to_conference(child_call_sid)
-    elif child_call_status == 'completed':
-        logger.info("Dial completed")
-        
-    return '', 200 
+    call_sid = params.get('CallSid')
+    call_status = params.get('CallStatus')
+    logger.info(f"Call {call_status} for CallSid: {call_sid}")
+    # Handle events based on call status if necessary
+    return '', 200
 
 @main.route("/join_conference", methods=['GET', 'POST'])
 def join_conference():
@@ -67,9 +65,9 @@ def join_conference():
     resp = VoiceResponse()
     dial = Dial()
     dial.conference(
-        "ABCDE",  # TODO: has to be unique otherwise you hear the aids
+        CONFERENCE_NAME,  # TODO: has to be unique otherwise you hear the aids
         start_conference_on_enter=True,
-        end_conference_on_exit=False,
+        end_conference_on_exit=False,  # if the CS leaves the conference need to end
         status_callback='/conference_events',
         status_callback_event='start join leave end',
         status_callback_method='POST'
@@ -103,6 +101,7 @@ def conference_events():
 def listening_bot_join_conference():
     response = VoiceResponse()
 
+    # Start streaming
     start = Start()
     start.stream(
         name='BotMediaStream',
@@ -110,20 +109,16 @@ def listening_bot_join_conference():
     )
     response.append(start)
 
-    # # Join the conference
-    # dial = Dial()
-    # dial.conference(
-    #     CONFERENCE_NAME,
-    #     start_conference_on_enter=True,
-    #     end_conference_on_exit=False
-    # )
-    # response.append(dial)
+    # Join the conference
+    dial = Dial()
+    dial.conference(
+        CONFERENCE_NAME,  # TODO: has to be unique otherwise you hear the aids
+        start_conference_on_enter=True,
+        end_conference_on_exit=False,
+        status_callback='/conference_events',
+        status_callback_event='start join leave end',
+        status_callback_method='POST'
+    )
+    response.append(dial)
 
     return str(response)
-
-
-@main.route("/test", methods=['GET'])
-def test():
-    """A simple test endpoint that returns 'Hello, World!'"""
-
-    return "Hello, World!"

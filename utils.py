@@ -3,6 +3,7 @@ from twilio.rest import Client
 import logging
 import ssl
 import dotenv
+from constants import WEBSOCKET_ADDRESS
 
 dotenv.load_dotenv('env/.env')
 
@@ -64,6 +65,13 @@ def get_ngrok_url():
             retries += 1
     raise Exception("ngrok URL not found. Is ngrok running?")
 
+
+
+def get_websocket_url():
+    if WEBSOCKET_ADDRESS.startswith('wss'):
+        return WEBSOCKET_ADDRESS
+
+    return WEBSOCKET_ADDRESS.replace('https', 'wss')
 
 # Create an SSL context
 #ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
