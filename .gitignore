@@ -1,3 +1,4 @@
 env/
 __pycache__/
 app.log
+ngrok_addresses.json

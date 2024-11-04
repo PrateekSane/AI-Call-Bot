@@ -3,13 +3,16 @@ from twilio.twiml.voice_response import VoiceResponse, Gather, Dial, Start
 from utils import logger, twilio_client
 import requests
 from datetime import datetime
-from constants import TWILIO_NUMBER, TARGET_NUMBER, CONFERENCE_NAME, WEBSOCKET_ADDRESS, CUSTOMER_SERVICE_NUMBER, FLASK_ADDRESS
+from constants import TWILIO_NUMBER, TARGET_NUMBER, CONFERENCE_NAME, CUSTOMER_SERVICE_NUMBER
 from call_handler import CallHandler
+from utils import get_flask_address, get_websocket_address
 
 
 main = Blueprint('main', __name__)
 call_handler = CallHandler(twilio_client)
 
+FLASK_ADDRESS = get_flask_address()
+WEBSOCKET_ADDRESS = get_websocket_address()
 
 @main.route("/start_call", methods=['POST'])
 def start_call():

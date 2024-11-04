@@ -1,10 +1,12 @@
 import asyncio
 import websockets
 import json
-from constants import WEBSOCKET_ADDRESS
+from utils import get_websocket_address
+
+WEBSOCKET_ADDRESS = get_websocket_address()
 
 async def test_websocket():
-    uri = f"wss://{WEBSOCKET_ADDRESS}"
+    uri =  WEBSOCKET_ADDRESS
     async with websockets.connect(uri) as websocket:
         # Create a test message
         test_message = {

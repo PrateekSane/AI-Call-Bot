@@ -1,5 +1,8 @@
 from utils import logger
-from constants import TWILIO_NUMBER, TARGET_NUMBER, CUSTOMER_SERVICE_NUMBER, FLASK_ADDRESS, CONFERENCE_NAME
+from constants import TWILIO_NUMBER, TARGET_NUMBER, CUSTOMER_SERVICE_NUMBER, CONFERENCE_NAME
+from utils import get_flask_address
+
+FLASK_ADDRESS = get_flask_address()
 
 
 

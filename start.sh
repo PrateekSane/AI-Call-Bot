@@ -3,17 +3,27 @@
 SESSION_STATUS=$(curl -s http://127.0.0.1:4040/api/tunnels)
 
 # Extract the forwarding addresses from ngrok's output
-FORWARDING_3000=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https" and .config.addr=="http://localhost:3000") | .public_url')
-FORWARDING_8765=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https" and .config.addr=="http://localhost:8765") | .public_url')
-# Check if forwarding addresses were found
-if [[ -z "$FORWARDING_3000" || -z "$FORWARDING_8765" ]]; then
+ADDRESSES_JSON=$(curl -s http://127.0.0.1:4040/api/tunnels | \
+jq '{
+  FLASK_ADDRESS: (.tunnels[] | select(.config.addr=="http://localhost:3000") | .public_url),
+  WEBSOCKET_ADDRESS: (.tunnels[] | select(.config.addr=="http://localhost:8100") | .public_url)
+}')
+
+# Check if addresses were retrieved
+if [[ -z "$ADDRESSES_JSON" || "$ADDRESSES_JSON" == "null" ]]; then
     echo "Failed to retrieve ngrok forwarding addresses."
     exit 1
 fi
 
+echo "$ADDRESSES_JSON" > ngrok_addresses.json
+
 # Print the forwarding addresses (optional)
-echo "Forwarding address for port 3000: $FORWARDING_3000"
-echo "Forwarding address for port 8765: $FORWARDING_8765"
+FLASK_ADDRESS=$(echo "$ADDRESSES_JSON" | jq -r '.FLASK_ADDRESS')
+WEBSOCKET_ADDRESS=$(echo "$ADDRESSES_JSON" | jq -r '.WEBSOCKET_ADDRESS')
+
+# Print the forwarding addresses (optional)
+echo "Forwarding address for port 3000: $FLASK_ADDRESS"
+echo "Forwarding address for port 8765: $WEBSOCKET_ADDRESS"
 
 # Call the Python script with the forwarding addresses as arguments
-python main.py "$FORWARDING_3000" "$FORWARDING_8765"
+python main.py
