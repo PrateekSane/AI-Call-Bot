@@ -14,6 +14,7 @@ call_handler = CallHandler(twilio_client)
 FLASK_ADDRESS = get_flask_address()
 WEBSOCKET_ADDRESS = get_websocket_address()
 
+
 @main.route("/start_call", methods=['POST'])
 def start_call():
     """Initiate calls to the user and customer service, and put them in a conference"""
@@ -108,7 +109,7 @@ def listening_bot_join_conference():
     start = Start()
     start.stream(
         name='BotMediaStream',
-        url=f"wss://{WEBSOCKET_ADDRESS}/media"
+        url=WEBSOCKET_ADDRESS
     )
     response.append(start)
 

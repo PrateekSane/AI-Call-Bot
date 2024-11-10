@@ -6,7 +6,21 @@ FLASK_ADDRESS = os.getenv('FLASK_ADDRESS')
 
 dotenv.load_dotenv('env/.env')
 
-def is_hold_message(speech_result: str):
+def is_hold_message(transcription_text):
+    hold_keywords = [
+        "please hold",
+        "we will be with you shortly",
+        "your call is important",
+        "waiting",
+        "hold on",
+        "on hold",
+        "one moment please",
+        "all agents are busy",
+    ]
+    transcription_text_lower = transcription_text.lower()
+    return any(keyword in transcription_text_lower for keyword in hold_keywords)
+
+
     if not speech_result:
         # if silence or if the music doesn't have speech
         return False

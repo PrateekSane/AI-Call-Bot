@@ -28,7 +28,7 @@ class CallHandler:
 
     def handle_conference_join(self, sid):
         self.increment_caller_join_count(sid)
-        print(self.get_participants_in_conference())
+        # print(self.get_participants_in_conference())
 
         if self.is_user_number(sid):
             logger.info("User has joined the conference.")
@@ -47,7 +47,7 @@ class CallHandler:
         # If person leaves, call the bot to join the conference
         # TODO: CHECK IF THE CUSTOMER SERVICE STILL IN THE CALL
 
-        print(self.get_participants_in_conference())
+        # print(self.get_participants_in_conference())
         customer_service_holding = True 
         if self.is_user_number(sid):
             # if customer_service_holding:
@@ -88,7 +88,6 @@ class CallHandler:
             self.caller_join_count[caller_sid] = 1
         else:
             self.caller_join_count[caller_sid] += 1
-
 
     def remove_bot_from_conference(self):
         """Remove the bot from the conference"""
