@@ -72,7 +72,6 @@ def load_ngrok_addresses():
         with open('ngrok_addresses.json', 'r') as f:
             ngrok_addresses = json.load(f)
     except FileNotFoundError:
-        logger.error("ngrok_addresses.json not found. Please run ngrok and try again.")
         return None
 
     return ngrok_addresses

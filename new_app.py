@@ -11,10 +11,21 @@ from dotenv import load_dotenv
 from twilio.rest import Client
 from twilio.twiml.voice_response import Dial
 from constants import CUSTOMER_SERVICE_NUMBER, TWILIO_PHONE_NUMBER, CONFERENCE_NAME
+from utils import twilio_client
 import logging
 import random
 
 load_dotenv('env/.env')
+
+# active_calls = twilio_client.calls.list(
+#     from_=TWILIO_PHONE_NUMBER,
+#     status="in-progress"
+# )
+
+# # End each active call by updating its status to 'completed'
+# for call in active_calls:
+#     twilio_client.calls(call.sid).update(status="completed")
+#     print(f"Ended call with SID: {call.sid}")
 
 
 # Configuration
@@ -56,31 +67,37 @@ app = FastAPI()
 async def index_page():
     return {"message": "Twilio Media Stream Server is running!"}
 
-@app.api_route("/initiate-call", methods=["GET"])
+@app.api_route("/initiate-call", methods=["GET", "POST"])
 async def initiate_call(request: Request):
     host = request.url.hostname
-    call = twilio_client.calls.create(
-        to=CUSTOMER_SERVICE_NUMBER,
+
+    # This triggers the webhook to the bot which makes it start the stream
+    bot_call = twilio_client.calls.create(
+        to=TWILIO_PHONE_NUMBER,
         from_=TWILIO_PHONE_NUMBER,
-        url=f"https://{host}/incoming-call",
+        url=f"https://{host}/bot_join_conference",
         status_callback=f"https://{host}/call_events",
         status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
         status_callback_method='POST'
     )
-    return {"message": "Call initiated"}
+    
+    customer_service_call = twilio_client.calls.create(
+        to=CUSTOMER_SERVICE_NUMBER,
+        from_=TWILIO_PHONE_NUMBER,
+        url=f"https://{host}/cs_join_conference",
+        status_callback=f"https://{host}/call_events",
+        status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
+        status_callback_method='POST'
+    )
+
+    return {"message": "Calls initiated"}
 
 
-@app.api_route("/incoming-call", methods=["GET", "POST"])
-async def incoming_call(request: Request):
+@app.api_route("/bot_join_conference", methods=["GET", "POST"])
+async def bot_join_conference(request: Request):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
     response = VoiceResponse()
-    # <Say> punctuation to improve text-to-speech flow
-    response.pause(length=1)
-    response.say("O.K. you can start talking!")
     host = request.url.hostname
-    connect = Connect()
-    connect.stream(url=f'wss://{host}/media-stream')
-    response.append(connect)
 
     # Add the caller to the conference
     dial = Dial()
@@ -96,6 +113,41 @@ async def incoming_call(request: Request):
     
     return HTMLResponse(content=str(response), media_type="application/xml")
 
+@app.api_route("/cs_join_conference", methods=["GET", "POST"])
+async def cs_join_conference(request: Request):
+    """Handle incoming call and return TwiML response to connect to Media Stream."""
+    response = VoiceResponse()
+    host = request.url.hostname
+
+    # Add the caller to the conference
+    dial = Dial()
+    dial.conference(
+        CONFERENCE_NAME,
+        start_conference_on_enter=True,
+        end_conference_on_exit=False,
+        status_callback=f"https://{host}/conference_events",
+        status_callback_event=['start', 'end', 'join', 'leave'],
+        status_callback_method='POST',
+    )
+    response.append(dial)
+    
+    return HTMLResponse(content=str(response), media_type="application/xml")
+
+
+@app.api_route("/incoming-call", methods=["GET", "POST"])
+async def incoming_call(request: Request):
+    """Handle incoming call and return TwiML response to connect to Media Stream."""
+    response = VoiceResponse()
+    # <Say> punctuation to improve text-to-speech flow
+    response.pause(length=1)
+    response.say("O.K. you can start talking!")
+    host = request.url.hostname
+
+    connect = Connect()
+    connect.stream(url=f'wss://{host}/media-stream')
+    response.append(connect)
+
+    return HTMLResponse(content=str(response), media_type="application/xml")
 
 @app.websocket("/media-stream")
 async def handle_media_stream(websocket: WebSocket):
@@ -216,7 +268,7 @@ def dial_user(call_url):
 @app.api_route("/call_events", methods=["POST"])
 def call_events(request: Request):
     """Handle call events"""
-    params = request.form()
+    # params = request.form()
     # call_sid = params.get('CallSid')
     # call_status = params.get('CallStatus')
     # print(f"Call {call_status} for CallSid: {call_sid}")
