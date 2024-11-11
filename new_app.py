@@ -15,9 +15,7 @@ import logging
 import random
 
 load_dotenv('env/.env')
-host = None
-user_call_sid = None
-CONFERENCE_NAME += str(random.randint(0, 1000000))
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY') # requires OpenAI Realtime API Access
@@ -65,7 +63,7 @@ async def initiate_call(request: Request):
         to=CUSTOMER_SERVICE_NUMBER,
         from_=TWILIO_PHONE_NUMBER,
         url=f"https://{host}/incoming-call",
-        status_callback=f"https://{host}/call-events",
+        status_callback=f"https://{host}/call_events",
         status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
         status_callback_method='POST'
     )
@@ -103,6 +101,7 @@ async def incoming_call(request: Request):
 async def handle_media_stream(websocket: WebSocket):
     """Handle WebSocket connections between Twilio and OpenAI."""
     print("Client connected")
+    host = websocket.url.hostname
     await websocket.accept()
     async with websockets.connect(
         'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01',
@@ -163,11 +162,10 @@ async def handle_media_stream(websocket: WebSocket):
                     if response['type'] == 'response.done':
                         if 'response' in response:
                             if is_bot_redirect(response['response']['output'][0]['content'][0]['transcript']):
-                                dial_user()
+                                dial_user(host)
             except Exception as e:
                 print(f"Error in send_to_twilio: {e}")
         await asyncio.gather(receive_from_twilio(), send_to_twilio())
-
 
 async def send_session_update(openai_ws):
     """Send session update to OpenAI WebSocket."""
@@ -194,7 +192,7 @@ def is_bot_redirect(transcript):
     print(f"Is redirect: {is_redirect}")
     return is_redirect
 
-def dial_user():
+def dial_user(call_url):
     """Dial the user number when redirect is detected"""
     try:
         # Initialize the Twilio client
@@ -204,10 +202,10 @@ def dial_user():
         call = twilio_client.calls.create(
             to=user_phone_number,
             from_=TWILIO_PHONE_NUMBER,
-            url=f"https://{host}/handle_user_call",
-            status_callback=f"https://{host}/call_events",
-            status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
-            status_callback_method='POST'
+            url=f"https://{call_url}/handle_user_call",
+            # status_callback=f"https://{call_url}/call_events",
+            # status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
+            # status_callback_method='POST'
         )
         print(f"Initiated call to user with SID: {call.sid}")
         return call.sid
@@ -215,21 +213,26 @@ def dial_user():
         print(f"Error initiating call to user: {e}")
         return None
     
-@app.api_route("/call-events", methods=["POST"])
+@app.api_route("/call_events", methods=["POST"])
 def call_events(request: Request):
     """Handle call events"""
-    print(request.json())
-    return {"message": "Call events received"}
+    params = request.form()
+    # call_sid = params.get('CallSid')
+    # call_status = params.get('CallStatus')
+    # print(f"Call {call_status} for CallSid: {call_sid}")
+    # Handle events based on call status if necessary
+    return '', 200
 
 
-@app.route("/handle_user_call", methods=['POST'])
+@app.api_route("/handle_user_call", methods=['POST'])
 def handle_user_call(request: Request):
     """Handle incoming calls and create a conference"""
     response = VoiceResponse()
     
     # Get the caller information
-    caller_sid = request.values.get('CallSid')
-    user_call_sid = caller_sid
+    # caller_sid = request.values.get('CallSid')
+    # user_call_sid = caller_sid
+    host = request.url.hostname
     
     # Add the caller to the conference
     dial = Dial()
@@ -243,9 +246,9 @@ def handle_user_call(request: Request):
     )
     response.append(dial)
 
-    return str(response)
+    return HTMLResponse(content=str(response), media_type="application/xml")
 
-@app.route("/conference_events", methods=['POST'])
+@app.api_route("/conference_events", methods=['POST'])
 def conference_events(request: Request):
     """Handle conference status events"""
     try:
