@@ -17,15 +17,17 @@ import random
 
 load_dotenv('env/.env')
 
-# active_calls = twilio_client.calls.list(
-#     from_=TWILIO_PHONE_NUMBER,
-#     status="in-progress"
-# )
+active_calls = twilio_client.calls.list(
+    from_=TWILIO_PHONE_NUMBER,
+    status="in-progress"
+)
+bot_call_sid = None
+user_call_sid = None
 
-# # End each active call by updating its status to 'completed'
-# for call in active_calls:
-#     twilio_client.calls(call.sid).update(status="completed")
-#     print(f"Ended call with SID: {call.sid}")
+# End each active call by updating its status to 'completed'
+for call in active_calls:
+    twilio_client.calls(call.sid).update(status="completed")
+    print(f"Ended call with SID: {call.sid}")
 
 
 # Configuration
@@ -80,7 +82,8 @@ async def initiate_call(request: Request):
         status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
         status_callback_method='POST'
     )
-    
+    global bot_call_sid
+    bot_call_sid = bot_call.sid
     customer_service_call = twilio_client.calls.create(
         to=CUSTOMER_SERVICE_NUMBER,
         from_=TWILIO_PHONE_NUMBER,
@@ -89,7 +92,7 @@ async def initiate_call(request: Request):
         status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
         status_callback_method='POST'
     )
-
+    cs_call_sid = customer_service_call.sid
     return {"message": "Calls initiated"}
 
 
@@ -259,6 +262,7 @@ def dial_user(call_url):
             # status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
             # status_callback_method='POST'
         )
+        user_call_sid = call.sid
         print(f"Initiated call to user with SID: {call.sid}")
         return call.sid
     except Exception as e:
@@ -268,24 +272,36 @@ def dial_user(call_url):
 @app.api_route("/call_events", methods=["POST"])
 def call_events(request: Request):
     """Handle call events"""
-    # params = request.form()
-    # call_sid = params.get('CallSid')
-    # call_status = params.get('CallStatus')
-    # print(f"Call {call_status} for CallSid: {call_sid}")
-    # Handle events based on call status if necessary
+    
     return '', 200
 
+
+@app.api_route("/user_call_events", methods=['POST'])
+async def user_call_events(request: Request):
+    """Handle user call events"""
+    form_data = await request.form()
+    call_status = form_data.get('CallStatus')
+    print(f"User call event: {call_status} for CallSid")
+
+    # Check if the user's call is in-progress (answered)
+    if call_status == 'in-progress':
+        # Remove the bot from the conference
+        print(f"Removing bot from conference with SID: {bot_call_sid}")
+        #
+    return '', 200
 
 @app.api_route("/handle_user_call", methods=['POST'])
 def handle_user_call(request: Request):
     """Handle incoming calls and create a conference"""
     response = VoiceResponse()
+    print(f"ENDING CALL FROM THE BOT WITH SID")
+    res = twilio_client.calls(bot_call_sid).update(status="completed") 
+    print(f"ENDING CALL FROM THE BOT WITH SID: {res}")
     
     # Get the caller information
     # caller_sid = request.values.get('CallSid')
     # user_call_sid = caller_sid
     host = request.url.hostname
-    
     # Add the caller to the conference
     dial = Dial()
     dial.conference(
