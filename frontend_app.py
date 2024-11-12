@@ -2,9 +2,11 @@ import streamlit as st
 import requests
 
 # User information
-user_name = "John Doe"
-user_email = "johndoe@example.com"
-user_phone = "555-123-4567"
+user_name = "Prateek Sane"
+user_email = "prateeksane@gmail.com"
+user_phone = "9164729906"
+
+url = 'https://e674-2001-5a8-42a8-7b00-4c18-e257-8329-875a.ngrok-free.app/initiate-call'
 
 # Display user information
 st.title("Customer Service Form")
@@ -38,10 +40,9 @@ if 'additional_fields' not in st.session_state:
 def add_field():
     st.session_state.additional_fields.append({'key': '', 'value': ''})
 
-st.button("Add More Information", on_click=add_field)
+st.button("\u2795", on_click=add_field)
 
 for i, field in enumerate(st.session_state.additional_fields):
-    st.write(f"Additional Info #{i+1}")
     cols = st.columns(2)
     key_input = cols[0].text_input(f"Key {i+1}", value=field['key'], key=f'key_{i}')
     value_input = cols[1].text_input(f"Value {i+1}", value=field['value'], key=f'value_{i}')
@@ -63,7 +64,7 @@ if st.button("Submit"):
     # Send data to API
     try:
         # Replace 'http://localhost:5000/api/process_form' with your actual API endpoint
-        response = requests.post('http://localhost:5000/api/process_form', json=data)
+        response = requests.post(url, json=data)
         if response.status_code == 200:
             st.success("Data successfully sent to API!")
             st.write("Response from API:")

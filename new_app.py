@@ -143,7 +143,7 @@ async def incoming_call(request: Request):
     response = VoiceResponse()
     # <Say> punctuation to improve text-to-speech flow
     response.pause(length=1)
-    response.say("O.K. you can start talking!")
+    response.say(f"Hi, Im an helpful agent working for {user_name}")
     host = request.url.hostname
 
     connect = Connect()
@@ -294,6 +294,7 @@ async def user_call_events(request: Request):
 def handle_user_call(request: Request):
     """Handle incoming calls and create a conference"""
     response = VoiceResponse()
+    response.say(f"Connecting you with {user_name} now. Thank you!")
     print(f"ENDING CALL FROM THE BOT WITH SID")
     res = twilio_client.calls(bot_call_sid).update(status="completed") 
     print(f"ENDING CALL FROM THE BOT WITH SID: {res}")
