@@ -41,16 +41,17 @@ twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_T
 user_name = "John Doe"
 user_email = "john.doe@example.com"
 user_phone_number = "+19164729906"
-reason_for_call = "I need help with my account"
+user_phone_number = "+14084976281"
+reason_for_call = "Accidental charge on the account. Double charged for a spotify subscription"
 
-SYSTEM_PROMPT = f"""You are the {user_name}'s helpful assistant and you are calling on their behalf to a customer service agent. YOU ARE NOT {user_name}.
+SYSTEM_PROMPT = f"""You are the {user_name}'s helpful assistant and you are calling on their behalf to a customer service agent to Capital One. YOU ARE NOT {user_name}.
     You are given the following pieces of information about the {user_name}. Use this information to help the customer service agent. Keep your responses concise and to the point.
     User Name: {user_name} 
     User Email: {user_email} 
     User Phone Number: {user_phone_number} 
     Reason for call: {reason_for_call} 
     You need to give the customer service agent the best possible information about the user so that they can help them. 
-    When you get stuck or you have given the customer service agent all the information you can, say "I need to redirect you to a human agent". 
+    When you get stuck or you have given the customer service agent all the information you can, say "I need to REDIRECT you to a human agent". 
     Do not make up information."""
 
 print(SYSTEM_PROMPT)
@@ -137,6 +138,7 @@ async def cs_join_conference(request: Request):
     return HTMLResponse(content=str(response), media_type="application/xml")
 
 
+# Called from the webhook on twilio
 @app.api_route("/incoming-call", methods=["GET", "POST"])
 async def incoming_call(request: Request):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
@@ -243,6 +245,7 @@ async def send_session_update(openai_ws):
 def is_bot_redirect(transcript):
     """Check if the word 'redirect' exists in the transcript"""
     transcript_words = transcript.split()
+    transcript_words = [word.lower() for word in transcript_words]
     is_redirect = 'redirect' in transcript_words
     print(f"Is redirect: {is_redirect}")
     return is_redirect
