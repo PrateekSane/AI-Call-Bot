@@ -1,11 +1,15 @@
 Run the following in one terminal
 
 ```
-ngrok start --all --config ngrok.yml
+ngrok http 5050
 ```
 
 In another terminal run:
 
 ```
-./start.sh
+uvicorn app:app --host 0.0.0.0 --port 5050 --reload
 ```
+
+use twilio online dev phone to pretend to be customer service
+
+make sure to modify on twilio console the ngrok address
