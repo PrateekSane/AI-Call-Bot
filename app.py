@@ -11,9 +11,10 @@ from dotenv import load_dotenv
 from twilio.rest import Client
 from twilio.twiml.voice_response import Dial
 from constants import CUSTOMER_SERVICE_NUMBER, TWILIO_PHONE_NUMBER, CONFERENCE_NAME
-from utils import twilio_client
-import logging
-import random
+from utils import twilio_client, logger
+from prompts import user_name, user_phone_number
+from openai_utils import get_openai_response
+from deepgram_handler import create_deepgram_stt_connection, close_deepgram_stt_connection, convert_mp3_to_mulaw, synthesize_speech
 
 load_dotenv('env/.env')
 
@@ -155,91 +156,90 @@ async def incoming_call(request: Request):
     return HTMLResponse(content=str(response), media_type="application/xml")
 
 @app.websocket("/media-stream")
-async def handle_media_stream(websocket: WebSocket):
-    """Handle WebSocket connections between Twilio and OpenAI."""
-    print("Client connected")
-    host = websocket.url.hostname
-    await websocket.accept()
-    async with websockets.connect(
-        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01',
-        extra_headers={
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "OpenAI-Beta": "realtime=v1"
-        }
-    ) as openai_ws:
-        await send_session_update(openai_ws)
-        stream_sid = None
-        async def receive_from_twilio():
-            """Receive audio data from Twilio and send it to the OpenAI Realtime API."""
-            nonlocal stream_sid
-            try:
-                async for message in websocket.iter_text():
-                    data = json.loads(message)
-                    if data['event'] == 'media' and openai_ws.open:
-                        audio_append = {
-                            "type": "input_audio_buffer.append",
-                            "audio": data['media']['payload']
-                        }
-                        await openai_ws.send(json.dumps(audio_append))
-                    elif data['event'] == 'start':
-                        stream_sid = data['start']['streamSid']
-                        print(f"Incoming stream has started {stream_sid}")
-            except WebSocketDisconnect:
-                print("Client disconnected.")
-                if openai_ws.open:
-                    await openai_ws.close()
-        async def send_to_twilio():
-            """Receive events from the OpenAI Realtime API, send audio back to Twilio."""
-            nonlocal stream_sid
-            try:
-                async for openai_message in openai_ws:
-                    response = json.loads(openai_message)
-                    if response['type'] in LOG_EVENT_TYPES:
-                        print(f"Received event: {response['type']}", response)
+async def handle_media_stream(twilio_websocket: WebSocket):
+    """
+    1. Accept the Twilio WebSocket.
+    2. Create a Deepgram STT connection.
+    3. On each transcript from Deepgram, call GPT -> TTS -> Twilio.
+    4. If GPT says "redirect", call dial_user.
+    """
+    logger.info("Twilio WebSocket connected.")
+    await twilio_websocket.accept()
 
-                    if response['type'] == 'session.updated':
-                        print("Session updated successfully:", response)
+    # We'll store the streamSid Twilio sends so we can route our TTS back to Twilio
+    twilio_stream_sid = None
 
+    # -- ASYNC callback for Deepgram transcripts -- #
+    async def on_transcript(transcript: str):
+        logger.info(f"[STT Transcript] {transcript}")
+        """
+        gpt_reply = await get_openai_response(transcript)
+        logger.info(f"[GPT Response] {gpt_reply}")
 
-                    if response['type'] == 'response.audio.delta' and response.get('delta'):
-                        # Audio from OpenAI
-                        try:
-                            audio_payload = base64.b64encode(base64.b64decode(response['delta'])).decode('utf-8')
-                            audio_delta = {
-                                "event": "media",
-                                "streamSid": stream_sid,
-                                "media": {
-                                    "payload": audio_payload
-                                }
-                            }
-                            await websocket.send_json(audio_delta)
-                        except Exception as e:
-                            print(f"Error processing audio data: {e}")
+        # Check for 'redirect'
+        if is_redirect(gpt_reply):
+            call_url = twilio_websocket.url.hostname
+            dial_user(call_url)
+            # TODO: have it say that redirecting the call to the user
+            return
 
-                    if response['type'] == 'response.done':
-                        if 'response' in response:
-                            if is_bot_redirect(response['response']['output'][0]['content'][0]['transcript']):
-                                dial_user(host)
-            except Exception as e:
-                print(f"Error in send_to_twilio: {e}")
-        await asyncio.gather(receive_from_twilio(), send_to_twilio())
+        # 3) Synthesize GPT text with Deepgram TTS
+        tts_mp3 = await synthesize_speech(gpt_reply)
+        if not tts_mp3:
+            return
 
-async def send_session_update(openai_ws):
-    """Send session update to OpenAI WebSocket."""
-    session_update = {
-        "type": "session.update",
-        "session": {
-            "turn_detection": {"type": "server_vad"},
-            "input_audio_format": "g711_ulaw",
-            "output_audio_format": "g711_ulaw",
-            "voice": VOICE,
-            "instructions": SYSTEM_PROMPT,
-            "modalities": ["text", "audio"],
-            "temperature": 0.8,
-        }
-    }
-    print('Sending session update:', json.dumps(session_update))
-    await openai_ws.send(json.dumps(session_update))
+        # 4) Convert MP3 -> mu-law 8kHz
+        tts_mulaw = convert_mp3_to_mulaw(tts_mp3)
+        if not tts_mulaw:
+            return
+
+        # 5) Base64-encode & send back to Twilio
+        if twilio_stream_sid:
+            payload_b64 = base64.b64encode(tts_mulaw).decode("utf-8")
+            media_msg = {
+                "event": "media",
+                "streamSid": twilio_stream_sid,
+                "media": {"payload": payload_b64},
+            }
+            await twilio_websocket.send_json(media_msg)
+            logger.info("Sent TTS audio back to Twilio.")
+        """
+
+    # Create Deepgram STT connection
+    dg_connection = await create_deepgram_stt_connection(on_transcript)
+    if dg_connection is None:
+        logger.error("Failed to open Deepgram STT. Closing Twilio WS.")
+        await twilio_websocket.close()
+        return
+
+    try:
+        while True:
+            message_text = await twilio_websocket.receive_text()
+            data = json.loads(message_text)
+
+            event_type = data.get("event", "")
+            if event_type == "start":
+                twilio_stream_sid = data["start"]["streamSid"]
+                logger.info(f"Twilio stream started: {twilio_stream_sid}")
+
+            elif event_type == "media":
+                # STT inbound from user
+                audio_b64 = data["media"]["payload"]
+                audio_bytes = base64.b64decode(audio_b64)
+                dg_connection.send(audio_bytes)
+
+            elif event_type == "stop":
+                logger.info("Received Twilio 'stop' event. Ending stream.")
+                break
+
+    except WebSocketDisconnect:
+        logger.info("Twilio WS disconnected unexpectedly.")
+    except Exception as e:
+        logger.error(f"Error reading Twilio WS: {e}")
+    finally:
+        await close_deepgram_stt_connection(dg_connection)
+        await twilio_websocket.close()
+        logger.info("Closed Twilio WS and Deepgram STT connection.")
 
 
 def is_bot_redirect(transcript):
@@ -277,7 +277,6 @@ def call_events(request: Request):
     """Handle call events"""
     
     return '', 200
-
 
 @app.api_route("/user_call_events", methods=['POST'])
 async def user_call_events(request: Request):

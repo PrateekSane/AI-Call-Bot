@@ -5,7 +5,7 @@ from deepgram import SpeakOptions
 from utils import logger
 from pydub import AudioSegment
 import io
-
+import asyncio
 DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 
 def get_deepgram_client():
@@ -17,34 +17,37 @@ def get_deepgram_client():
 
 async def create_deepgram_stt_connection(on_transcript):
     """
-    Creates and returns an async Deepgram websocket connection.
-    We'll define a callback for receiving transcripts as well.
+    Create a Deepgram live STT connection. 
+    on_transcript is an async callback that receives transcripts from Deepgram.
     """
-    deepgram = get_deepgram_client()
-    
-    dg_connection = deepgram.listen.websocket.v("1")
+    dg_client = get_deepgram_client()
+    dg_connection = dg_client.listen.websocket.v("1")
 
-    # Callback for transcripts
-    def on_transcript_event(self, transcript_data, **kwargs):
-        sentence = transcript_data.channel.alternatives[0].transcript
-        if sentence:
-            print(f"Deepgram says: {sentence}")
+    # Register the transcript event
+    def on_transcript_event(self, result, **kwargs):
+        # Grab the transcript string
+        if not result.channel.alternatives:
+            return
+        transcript = result.channel.alternatives[0].transcript
+        if transcript:
+            # We call the user-provided callback
+            asyncio.run_coroutine_threadsafe(on_transcript(transcript), asyncio.get_event_loop())
 
-    # Register the callback
     dg_connection.on(LiveTranscriptionEvents.Transcript, on_transcript_event)
 
-    # Start the connection with LiveOptions
+    # Start the STT connection
     options = LiveOptions(
         model="nova-2",
-        # Add other relevant settings (punctuate, encoding, sample_rate, etc.)
+        encoding="mulaw",  # If Twilio is sending 8kHz mu-law
+        sample_rate=8000,
+        # punctuate=True, etc.
     )
     started_ok = dg_connection.start(options)
     if not started_ok:
-        logger.error("Failed to start Deepgram connection.")
+        logger.error("Failed to start Deepgram STT connection.")
         return None
-    else:
-        logger.info("Deepgram connection started successfully.")
-    
+
+    logger.info("Deepgram STT connection started.")
     return dg_connection
 
 async def close_deepgram_stt_connection(dg_connection):
