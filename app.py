@@ -146,13 +146,12 @@ async def handle_media_stream(twilio_websocket: WebSocket):
     # We'll store the streamSid Twilio sends so we can route our TTS back to Twilio
     twilio_stream_sid = None
 
-    def on_transcript(transcript: str):
+    async def on_transcript(transcript: str):
         logger.info(f"[STT Transcript] {transcript}")
 
         gpt_reply = get_openai_response(transcript)
         logger.info(f"[GPT Response] {gpt_reply}")
 
-        """
         # Check for 'redirect'
         if is_redirect(gpt_reply):
             call_url = twilio_websocket.url.hostname
@@ -180,6 +179,7 @@ async def handle_media_stream(twilio_websocket: WebSocket):
             }
             await twilio_websocket.send_json(media_msg)
             logger.info("Sent TTS audio back to Twilio.")
+        """
         """
 
     # Create Deepgram STT connection
@@ -219,7 +219,7 @@ async def handle_media_stream(twilio_websocket: WebSocket):
         logger.info("Closed Twilio WS and Deepgram STT connection.")
 
 
-def is_bot_redirect(transcript):
+def is_redirect(transcript):
     """Check if the word 'redirect' exists in the transcript"""
     transcript_words = transcript.split()
     transcript_words = [word.lower() for word in transcript_words]

@@ -22,7 +22,7 @@ async def create_deepgram_stt_connection(on_transcript):
     """
     dg_client = get_deepgram_client()
     dg_connection = dg_client.listen.websocket.v("1")
-
+    loop = asyncio.get_event_loop()
     # Register the transcript event
     def on_transcript_event(self, result, **kwargs):
         # Grab the transcript string
@@ -31,7 +31,7 @@ async def create_deepgram_stt_connection(on_transcript):
         transcript = result.channel.alternatives[0].transcript
         if transcript:
             # We call the user-provided callback
-            on_transcript(transcript)
+            asyncio.run_coroutine_threadsafe(on_transcript(transcript), loop)
 
     dg_connection.on(LiveTranscriptionEvents.Transcript, on_transcript_event)
 
@@ -74,8 +74,10 @@ async def synthesize_speech(text: str) -> bytes:
 
     try:
         # This calls the TTS endpoint and returns the audio in memory
-        response = deepgram.speak.rest.v("1").get(body, tts_options)
-        audio_bytes = response.content  # This is typically MP3 data
+        logger.info(f"Synthesizing speech for: {text}")
+        tts_response = await deepgram.speak.asyncrest.v("1").stream_memory(body, tts_options)
+        audio_buffer = tts_response.stream_memory.getbuffer()
+        audio_bytes = audio_buffer.tobytes()
         return audio_bytes
     except Exception as e:
         logger.error(f"Error synthesizing speech with Deepgram: {e}")
@@ -94,8 +96,8 @@ def convert_mp3_to_mulaw(mp3_bytes: bytes) -> bytes:
         mp3_data = AudioSegment.from_file(io.BytesIO(mp3_bytes), format="mp3")
         # Convert to 8kHz, mono, mu-law
         mu_law_data = mp3_data.set_frame_rate(8000).set_channels(1).set_sample_width(1).export(
-            format="raw",
-            codec="mulaw",
+            format="wav",
+            codec="pcm_mulaw",
         )
         return mu_law_data.read()
     except Exception as e:
