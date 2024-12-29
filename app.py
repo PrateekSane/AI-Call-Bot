@@ -31,31 +31,8 @@ for call in active_calls:
     print(f"Ended call with SID: {call.sid}")
 
 
-# Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY') # requires OpenAI Realtime API Access
-if not OPENAI_API_KEY:
-    raise ValueError('Missing the OpenAI API key. Please set it in the .env file.')
-
 PORT = int(os.getenv('PORT', 5050))
 twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
-
-user_name = "John Doe"
-user_email = "john.doe@example.com"
-user_phone_number = "+19164729906"
-user_phone_number = "+14084976281"
-reason_for_call = "Accidental charge on the account. Double charged for a spotify subscription"
-
-SYSTEM_PROMPT = f"""You are the {user_name}'s helpful assistant and you are calling on their behalf to a customer service agent to Capital One. YOU ARE NOT {user_name}.
-    You are given the following pieces of information about the {user_name}. Use this information to help the customer service agent. Keep your responses concise and to the point.
-    User Name: {user_name} 
-    User Email: {user_email} 
-    User Phone Number: {user_phone_number} 
-    Reason for call: {reason_for_call} 
-    You need to give the customer service agent the best possible information about the user so that they can help them. 
-    When you get stuck or you have given the customer service agent all the information you can, say "I need to REDIRECT you to a human agent". 
-    Do not make up information."""
-
-print(SYSTEM_PROMPT)
 
 VOICE = 'alloy'
 
