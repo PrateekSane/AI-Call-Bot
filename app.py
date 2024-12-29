@@ -146,13 +146,13 @@ async def handle_media_stream(twilio_websocket: WebSocket):
     # We'll store the streamSid Twilio sends so we can route our TTS back to Twilio
     twilio_stream_sid = None
 
-    # -- ASYNC callback for Deepgram transcripts -- #
-    async def on_transcript(transcript: str):
+    def on_transcript(transcript: str):
         logger.info(f"[STT Transcript] {transcript}")
-        """
-        gpt_reply = await get_openai_response(transcript)
+
+        gpt_reply = get_openai_response(transcript)
         logger.info(f"[GPT Response] {gpt_reply}")
 
+        """
         # Check for 'redirect'
         if is_redirect(gpt_reply):
             call_url = twilio_websocket.url.hostname

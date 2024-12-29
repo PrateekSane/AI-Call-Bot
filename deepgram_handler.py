@@ -22,7 +22,7 @@ async def create_deepgram_stt_connection(on_transcript):
     """
     dg_client = get_deepgram_client()
     dg_connection = dg_client.listen.websocket.v("1")
-    loop = asyncio.get_event_loop()
+
     # Register the transcript event
     def on_transcript_event(self, result, **kwargs):
         # Grab the transcript string
@@ -31,7 +31,7 @@ async def create_deepgram_stt_connection(on_transcript):
         transcript = result.channel.alternatives[0].transcript
         if transcript:
             # We call the user-provided callback
-            asyncio.run_coroutine_threadsafe(on_transcript(transcript), loop)
+            on_transcript(transcript)
 
     dg_connection.on(LiveTranscriptionEvents.Transcript, on_transcript_event)
 

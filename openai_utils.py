@@ -1,13 +1,12 @@
-import openai
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from prompts import SYSTEM_PROMPT
 from utils import logger
 
-openai.api_key = os.getenv('OPENAI_API_KEY')
+openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-
-async def get_openai_response(transcript: str) -> str:
+def get_openai_response(transcript: str) -> str:
     """
     Given user transcript, call OpenAI Chat or Completions.
     Keep it simple here: one user message + system prompt.
@@ -17,14 +16,13 @@ async def get_openai_response(transcript: str) -> str:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": transcript},
         ]
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-3.5-turbo",
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=messages,
-            temperature=0.8,
         )
-        # Extract the assistant text response
-        assistant_reply = response.choices[0].message["content"]
-        return assistant_reply.strip()
+
+        assistant_reply = response.choices[0].message.content.strip()
+        return assistant_reply
     except Exception as e:
         logger.error(f"OpenAI error: {e}")
         return "I encountered an error. Please hold."
