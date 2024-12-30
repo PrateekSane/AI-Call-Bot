@@ -1,20 +1,26 @@
-import os
-import json
 import base64
-import asyncio
-import websockets
-from fastapi import FastAPI, WebSocket, Request
+import json
+import os
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
-from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
-from dotenv import load_dotenv
 from twilio.rest import Client
-from constants import CUSTOMER_SERVICE_NUMBER, TWILIO_PHONE_NUMBER, CONFERENCE_NAME
-from utils import twilio_client, logger
-from prompts import user_name, user_phone_number
+from twilio.twiml.voice_response import Connect, Say, Stream, VoiceResponse
+from twilio_utils import create_call, create_conference, is_redirect, end_call
+
+from constants import CUSTOMER_SERVICE_NUMBER, TWILIO_PHONE_NUMBER, CallInfo
+from call_manager import call_manager
+from deepgram_handler import (
+    close_deepgram_stt_connection,
+    convert_mp3_to_mulaw,
+    create_deepgram_stt_connection,
+    synthesize_speech
+)
 from openai_utils import get_openai_response
-from deepgram_handler import create_deepgram_stt_connection, close_deepgram_stt_connection, convert_mp3_to_mulaw, synthesize_speech
-from call_utils import create_call, create_conference, is_redirect
+from prompts import user_name, user_phone_number
+from utils import logger, twilio_client
 
 load_dotenv('env/.env')
 
@@ -22,8 +28,6 @@ active_calls = twilio_client.calls.list(
     from_=TWILIO_PHONE_NUMBER,
     status="in-progress"
 )
-bot_call_sid = None
-user_call_sid = None
 
 # End each active call by updating its status to 'completed'
 for call in active_calls:
@@ -50,29 +54,47 @@ async def index_page():
 
 @app.api_route("/initiate-call", methods=["GET", "POST"])
 async def initiate_call(request: Request):
+    print("INITIATING CALL sdjdfkl")
     host = request.url.hostname
-    join_conference_url = f"https://{host}/caller_join_conference"
+    session_id = call_manager.create_new_session()
+    join_conference_url = f"https://{host}/caller_join_conference/{session_id}"
     call_events_url = f"https://{host}/call_events"
 
-    # This triggers the webhook to the bot which makes it start the stream
-    bot_call = create_call(twilio_client, TWILIO_PHONE_NUMBER, TWILIO_PHONE_NUMBER, join_conference_url, call_events_url)
-    global bot_call_sid
-    bot_call_sid = bot_call.sid
+    # 1) Kick off the 'bot call'
+    bot_call = create_call(
+        twilio_client, 
+        to=TWILIO_PHONE_NUMBER,
+        from_=TWILIO_PHONE_NUMBER,
+        url=join_conference_url,
+        status_callback=call_events_url
+    )
+    call_manager.link_call_to_session(bot_call.sid, session_id)
+    call_manager.set_session_value(session_id, CallInfo.OUTBOUND_BOT_SID, bot_call.sid)
 
-    customer_service_call = create_call(twilio_client, CUSTOMER_SERVICE_NUMBER, TWILIO_PHONE_NUMBER, join_conference_url, call_events_url)
-    customer_service_call_sid = customer_service_call.sid
-    return {"message": "Calls initiated"}
+    # 2) Kick off the 'customer service call'
+    cs_call = create_call(
+        twilio_client,
+        to=CUSTOMER_SERVICE_NUMBER,
+        from_=TWILIO_PHONE_NUMBER,
+        url=join_conference_url,
+        status_callback=call_events_url
+    )
+    call_manager.link_call_to_session(cs_call.sid, session_id)
+    call_manager.set_session_value(session_id, CallInfo.CUSTOMER_SERVICE_SID, cs_call.sid)
+    print("TSET", call_manager.get_session_by_id(session_id))
+    return {"message": "Calls initiated", "session_id": session_id}
 
 
-@app.api_route("/caller_join_conference", methods=["GET", "POST"])
-async def caller_join_conference(request: Request):
+@app.api_route("/caller_join_conference/{session_id}", methods=["GET", "POST"])
+async def caller_join_conference(request: Request, session_id: str):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
     response = VoiceResponse()
     host = request.url.hostname
+    conference_name = call_manager.get_conference_name(session_id)
 
     # Add the caller to the conference
-    conference_events_url = f"https://{host}/conference_events"
-    response.append(create_conference(CONFERENCE_NAME, host, conference_events_url))
+    conference_events_url = f"https://{host}/conference_events/{session_id}"
+    response.append(create_conference(conference_name, host, conference_events_url))
     
     return HTMLResponse(content=str(response), media_type="application/xml")
 
@@ -80,20 +102,28 @@ async def caller_join_conference(request: Request):
 @app.api_route("/incoming-call", methods=["GET", "POST"])
 async def incoming_call(request: Request):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
+    host = request.url.hostname
+    form_data = await request.form()
+    print("FORM DATA", form_data)
+    print("QUERY PARAMS", request.query_params)
+    incoming_call_sid = form_data.get('CallSid')
+    # PROBLEM IS THAT INCOMING_CALL_SID IS NOT IN CALL MANAGER
+    call_manager.link_call_to_session(incoming_call_sid, session_id)
+    call_manager.set_session_value(session_id, CallInfo.INBOUND_BOT_SID, incoming_call_sid)
+
     response = VoiceResponse()
-    # <Say> punctuation to improve text-to-speech flow
     response.pause(length=1)
     response.say(f"Hi, Im an helpful agent working for {user_name}")
-    host = request.url.hostname
+
 
     connect = Connect()
-    connect.stream(url=f'wss://{host}/media-stream')
+    connect.stream(url=f'wss://{host}/media-stream/{session_id}')
     response.append(connect)
 
     return HTMLResponse(content=str(response), media_type="application/xml")
 
-@app.websocket("/media-stream")
-async def handle_media_stream(twilio_websocket: WebSocket):
+@app.websocket("/media-stream/{session_id}")
+async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     """
     1. Accept the Twilio WebSocket.
     2. Create a Deepgram STT connection.
@@ -101,6 +131,10 @@ async def handle_media_stream(twilio_websocket: WebSocket):
     4. If GPT says "redirect", call dial_user.
     """
     logger.info("Twilio WebSocket connected.")
+    session_info = call_manager.get_session_by_id(session_id)
+    if not session_info:
+        logger.error(f"Session not found for CallSid: {session_id}. BE CAREFUL")
+
     await twilio_websocket.accept()
 
     # We'll store the streamSid Twilio sends so we can route our TTS back to Twilio
@@ -115,7 +149,7 @@ async def handle_media_stream(twilio_websocket: WebSocket):
         # Check for 'redirect'
         if is_redirect(gpt_reply):
             call_url = twilio_websocket.url.hostname
-            dial_user(call_url)
+            dial_user(call_url, session_id)
             # TODO: have it say that redirecting the call to the user
             return
 
@@ -139,8 +173,7 @@ async def handle_media_stream(twilio_websocket: WebSocket):
             }
             await twilio_websocket.send_json(media_msg)
             logger.info("Sent TTS audio back to Twilio.")
-        """
-        """
+
 
     # Create Deepgram STT connection
     dg_connection = await create_deepgram_stt_connection(on_transcript)
@@ -158,6 +191,7 @@ async def handle_media_stream(twilio_websocket: WebSocket):
             if event_type == "start":
                 twilio_stream_sid = data["start"]["streamSid"]
                 logger.info(f"Twilio stream started: {twilio_stream_sid}")
+                call_manager.set_session_value(session_id, CallInfo.TWILIO_STREAM_SID, twilio_stream_sid)
 
             elif event_type == "media":
                 # STT inbound from user
@@ -179,22 +213,20 @@ async def handle_media_stream(twilio_websocket: WebSocket):
         logger.info("Closed Twilio WS and Deepgram STT connection.")
 
 
-def dial_user(call_url):
+def dial_user(call_url, session_id):
     """Dial the user number when redirect is detected"""
     try:
-        # Initialize the Twilio client
-        print("CALLING BACK USER") 
-        # Make the call
-
-        call = twilio_client.calls.create(
+        call = create_call(
+            twilio_client,
             to=user_phone_number,
             from_=TWILIO_PHONE_NUMBER,
             url=f"https://{call_url}/handle_user_call",
-            # status_callback=f"https://{call_url}/call_events",
-            # status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
-            # status_callback_method='POST'
+            status_callback=f"https://{call_url}/call_events",
+            status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
+            status_callback_method='POST'
         )
-        user_call_sid = call.sid
+        call_manager.set_session_value(session_id, CallInfo.USER_SID, call.sid)
+
         print(f"Initiated call to user with SID: {call.sid}")
         return call.sid
     except Exception as e:
@@ -202,21 +234,24 @@ def dial_user(call_url):
         return None
 
 @app.api_route("/handle_user_call", methods=['POST'])
-def handle_user_call(request: Request):
+async def handle_user_call(request: Request):
     """Handle incoming calls and create a conference"""
+    host = request.url.hostname
+    form_data = await request.form()
+    session_id = form_data.get('CallSid')
+
     response = VoiceResponse()
     response.say(f"Connecting you with {user_name} now. Thank you!")
-    res = twilio_client.calls(bot_call_sid).update(status="completed") 
+
+    session_info = call_manager.get_session_by_id(session_id)
+    bot_call_sid = session_info.get(CallInfo.BOT_SID)
+    end_call(twilio_client, bot_call_sid)
     
-    # Get the caller information
-    # caller_sid = request.values.get('CallSid')
-    # user_call_sid = caller_sid
-    host = request.url.hostname
     # Add the caller to the conference
     response.append(
         create_conference(
-            conference_name=CONFERENCE_NAME,
-            call_events_url=f"https://{host}/conference_events",
+            conference_name=call_manager.get_conference_name(session_id),
+            call_events_url=f"https://{host}/conference_events/{session_id}",
             start_conference_on_enter=False,
             end_conference_on_exit=True
         )
@@ -224,25 +259,29 @@ def handle_user_call(request: Request):
 
     return HTMLResponse(content=str(response), media_type="application/xml")
 
-@app.api_route("/conference_events", methods=['POST'])
-def conference_events(request: Request):
+@app.api_route("/conference_events/{session_id}", methods=['POST'])
+async def conference_events(request: Request, session_id: str):
     """Handle conference status events"""
     try:
-        event_type = request.values.get('StatusCallbackEvent')
-        conference_sid = request.values.get('ConferenceSid')
-        call_sid = request.values.get('CallSid')
+        form_data = await request.form()
+        event_type = form_data.get('StatusCallbackEvent')
+        conference_sid = form_data.get('ConferenceSid')
+        call_sid = form_data.get('CallSid')
+
+        session_info = call_manager.get_session_by_id(session_id)
+        call_manager.set_session_value(session_info, CallInfo.CONFERENCE_SID, conference_sid)
         
         print(f"Conference Event: {event_type} for conference {conference_sid}")
         
         if event_type == 'participant-join':
             # Check if this is the user joining (you'll need to track the user's CallSid)
-            logger.debug(f"Conference join CallSid: {call_sid} and user_call_sid: {user_call_sid}")
+            logger.debug(f"Conference join CallSid: {call_sid}")
             # if call_sid == user_call_sid:  # You'll need to store user_call_sid when making the initial call
             #     # Connect the bot to the conference
             #     connect_bot_to_conference(conference_sid)
                 
         elif event_type == 'participant-leave':
-            reason = request.values.get('ReasonParticipantLeft', 'unknown')
+            reason = form_data.get('ReasonParticipantLeft', 'unknown')
             logger.debug(f"Participant left conference. Reason: {reason}")
             
             # # If the bot is in the conference and the user has joined, remove the bot
@@ -253,12 +292,13 @@ def conference_events(request: Request):
     except Exception as e:
         print(f"Error handling conference event: {e}")
         return str(e), 500
+
         
 @app.api_route("/call_events", methods=["POST"])
-def call_events(request: Request):
+async def call_events(request: Request):
     """Handle call events"""
     try:
-        form_data = request.form()
+        form_data = await request.form()
         event_type = form_data.get('StatusCallbackEvent')
         call_sid = form_data.get('CallSid')
         parent_call_sid = form_data.get('ParentCallSid')

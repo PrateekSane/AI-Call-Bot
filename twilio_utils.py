@@ -1,4 +1,6 @@
 from twilio.twiml.voice_response import Dial
+from twilio.rest import Client
+
 
 def create_call(twilio_client, to, from_, url, status_callback, 
                 status_callback_event=None, status_callback_method='POST'):
@@ -37,3 +39,6 @@ def is_redirect(transcript):
     is_redirect = 'redirect' in transcript_words
     print(f"Is redirect: {is_redirect}")
     return is_redirect
+
+def end_call(twilio_client: Client, call_sid: str):
+    twilio_client.calls(call_sid).update(status="completed")
