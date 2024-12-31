@@ -1,8 +1,9 @@
 import os
-from deepgram import Deepgram
 from pydub import AudioSegment
 import io
 import asyncio
+
+from deepgram import DeepgramClient
 from deepgram import LiveTranscriptionEvents, LiveOptions, SpeakOptions
 
 from backend.utils.utils import logger
@@ -14,7 +15,7 @@ def get_deepgram_client():
         logger.error("Missing DEEPGRAM_API_KEY.")
         return None
 
-    return Deepgram(api_key=DEEPGRAM_API_KEY)
+    return DeepgramClient(api_key=DEEPGRAM_API_KEY)
 
 async def create_deepgram_stt_connection(on_transcript):
     """

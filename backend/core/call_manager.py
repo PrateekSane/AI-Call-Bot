@@ -20,13 +20,13 @@ class CallManager:
             session_id = str(uuid.uuid4())
             conference_name = str(uuid.uuid4())
             
-            session = SessionData(
+            session_data = SessionData(
                 session_id=session_id,
                 conference_name=conference_name,
                 call_sids=CallSids()
             )
             
-            self._sessions[session_id] = session
+            self._sessions[session_id] = session_data
             return session_id
 
     def link_call_to_session(self, call_sid: str, session_id: str):
@@ -70,6 +70,40 @@ class CallManager:
             elif key == CallInfo.USER_SID.value:
                 session.call_sids.user = value
 
+    def get_session_value(self, session_id: str, key: str) -> Optional[Any]:
+        """Get a particular field from a session."""
+        with self._lock:
+            if session_id not in self._sessions:
+                logger.error(f"Session {session_id} not found")
+                return None
+            
+            session = self._sessions[session_id]
+            
+            # Get the appropriate field based on the key
+            if key == CallInfo.BOT_NUMBER.value:
+                return session.bot_number
+            elif key == CallInfo.CS_NUMBER.value:
+                return session.cs_number
+            elif key == CallInfo.USER_NUMBER.value:
+                return session.user_number
+            elif key == CallInfo.CONFERENCE_SID.value:
+                return session.conference_sid
+            elif key == CallInfo.TWILIO_STREAM_SID.value:
+                return session.twilio_stream_sid
+            elif key == CallInfo.USER_INFO.value:
+                return session.user_info
+            # Handle call SIDs
+            elif key == CallInfo.OUTBOUND_BOT_SID.value:
+                return session.call_sids.outbound_bot
+            elif key == CallInfo.INBOUND_BOT_SID.value:
+                return session.call_sids.inbound_bot
+            elif key == CallInfo.CUSTOMER_SERVICE_SID.value:
+                return session.call_sids.customer_service
+            elif key == CallInfo.USER_SID.value:
+                return session.call_sids.user
+            
+            return None
+    
     def get_session_for_call(self, call_sid: str) -> Optional[SessionData]:
         """Given a callSid, return the session it belongs to, or None."""
         with self._lock:
