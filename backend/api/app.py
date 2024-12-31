@@ -8,22 +8,22 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.rest import Client
 from twilio.twiml.voice_response import Connect, VoiceResponse
-from twilio_utils import create_call, create_conference, is_redirect, end_call
 
-from constants import CallInfo
-from call_manager import call_manager
-from deepgram_handler import (
+from backend.core.constants import CallInfo
+from backend.core.call_manager import call_manager
+from backend.core.models import InitiateCallRequest
+from backend.services.deepgram_handler import (
     close_deepgram_stt_connection,
     convert_mp3_to_mulaw,
     create_deepgram_stt_connection,
     synthesize_speech
 )
-from openai_utils import get_openai_response
-from prompts import generate_system_prompt
-from utils import logger, twilio_client
-from models import InitiateCallRequest
+from backend.services.openai_utils import get_openai_response
+from backend.services.prompts import generate_system_prompt
+from backend.services.twilio_utils import create_call, create_conference, is_redirect, end_call
+from backend.utils.utils import logger, twilio_client
 
-load_dotenv('env/.env')
+load_dotenv('../env/.env')
 
 """
 # TODO: move into call_manager
