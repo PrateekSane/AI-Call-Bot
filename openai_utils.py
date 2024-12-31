@@ -1,19 +1,14 @@
 from openai import OpenAI
 import os
-from dotenv import load_dotenv
-from prompts import SYSTEM_PROMPT
 from utils import logger
 
 openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-def get_openai_response(transcript: str) -> str:
-    """
-    Given user transcript, call OpenAI Chat or Completions.
-    Keep it simple here: one user message + system prompt.
-    """
+def get_openai_response(system_prompt: str, transcript: str) -> str:
+    """Simple OpenAI chat completion with system prompt and user transcript"""
     try:
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": transcript},
         ]
         response = openai_client.chat.completions.create(

@@ -10,7 +10,7 @@ from twilio.rest import Client
 from twilio.twiml.voice_response import Connect, Say, Stream, VoiceResponse
 from twilio_utils import create_call, create_conference, is_redirect, end_call
 
-from constants import CUSTOMER_SERVICE_NUMBER, TWILIO_PHONE_NUMBER, CallInfo
+from constants import CallInfo
 from call_manager import call_manager
 from deepgram_handler import (
     close_deepgram_stt_connection,
@@ -19,11 +19,13 @@ from deepgram_handler import (
     synthesize_speech
 )
 from openai_utils import get_openai_response
-from prompts import user_name, user_phone_number
+from prompts import user_name
 from utils import logger, twilio_client
 
 load_dotenv('env/.env')
 
+"""
+# TODO: move into call_manager
 active_calls = twilio_client.calls.list(
     from_=TWILIO_PHONE_NUMBER,
     status="in-progress"
@@ -33,18 +35,10 @@ active_calls = twilio_client.calls.list(
 for call in active_calls:
     twilio_client.calls(call.sid).update(status="completed")
     print(f"Ended call with SID: {call.sid}")
+"""
 
 
 PORT = int(os.getenv('PORT', 5050))
-twilio_client = Client(os.getenv('TWILIO_ACCOUNT_SID'), os.getenv('TWILIO_AUTH_TOKEN'))
-
-VOICE = 'alloy'
-
-LOG_EVENT_TYPES = [
-    'response.content.done', 'rate_limits.updated', 'response.done',
-    'input_audio_buffer.committed', 'input_audio_buffer.speech_stopped',
-    'input_audio_buffer.speech_started', 'session.created'
-]
 app = FastAPI()
 
 
@@ -52,37 +46,65 @@ app = FastAPI()
 async def index_page():
     return {"message": "Twilio Media Stream Server is running!"}
 
+
 @app.api_route("/initiate-call", methods=["GET", "POST"])
 async def initiate_call(request: Request):
-    print("INITIATING CALL sdjdfkl")
-    host = request.url.hostname
-    session_id = call_manager.create_new_session()
-    join_conference_url = f"https://{host}/caller_join_conference/{session_id}"
-    call_events_url = f"https://{host}/call_events"
+    try:
+        # Get JSON data from request
+        data = await request.json()
+        bot_number = data.get("bot_number")
+        cs_number = data.get("cs_number")
+        target_number = data.get("target_number")
+        system_info = data.get("system_info", {})  # Additional fields for system prompt
+        
+        if not all([bot_number, cs_number, target_number]):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Missing required fields"}
+            )
 
-    # 1) Kick off the 'bot call'
-    bot_call = create_call(
-        twilio_client, 
-        to=TWILIO_PHONE_NUMBER,
-        from_=TWILIO_PHONE_NUMBER,
-        url=join_conference_url,
-        status_callback=call_events_url
-    )
-    call_manager.link_call_to_session(bot_call.sid, session_id)
-    call_manager.set_session_value(session_id, CallInfo.OUTBOUND_BOT_SID, bot_call.sid)
+        host = request.url.hostname
+        session_id = call_manager.create_new_session()
+        
+        # Store all the call information in the session
+        call_manager.set_session_value(session_id, "bot_number", bot_number)
+        call_manager.set_session_value(session_id, "cs_number", cs_number)
+        call_manager.set_session_value(session_id, "target_number", target_number)
+        call_manager.set_session_value(session_id, "system_info", system_info)
 
-    # 2) Kick off the 'customer service call'
-    cs_call = create_call(
-        twilio_client,
-        to=CUSTOMER_SERVICE_NUMBER,
-        from_=TWILIO_PHONE_NUMBER,
-        url=join_conference_url,
-        status_callback=call_events_url
-    )
-    call_manager.link_call_to_session(cs_call.sid, session_id)
-    call_manager.set_session_value(session_id, CallInfo.CUSTOMER_SERVICE_SID, cs_call.sid)
-    print("TSET", call_manager.get_session_by_id(session_id))
-    return {"message": "Calls initiated", "session_id": session_id}
+        join_conference_url = f"https://{host}/caller_join_conference/{session_id}"
+        call_events_url = f"https://{host}/call_events"
+        
+        # Rest of your existing call creation code...
+        bot_call = create_call(
+            twilio_client, 
+            to=bot_number,
+            from_=bot_number,
+            url=join_conference_url,
+            status_callback=call_events_url
+        )
+        call_manager.link_call_to_session(bot_call.sid, session_id)
+        call_manager.set_session_value(session_id, CallInfo.OUTBOUND_BOT_SID, bot_call.sid)
+
+        # Create customer service call...
+        cs_call = create_call(
+            twilio_client,
+            to=cs_number,
+            from_=bot_number,
+            url=join_conference_url,
+            status_callback=call_events_url
+        )
+        call_manager.link_call_to_session(cs_call.sid, session_id)
+        call_manager.set_session_value(session_id, CallInfo.CUSTOMER_SERVICE_SID, cs_call.sid)
+        
+        return {"message": "Calls initiated", "session_id": session_id}
+        
+    except Exception as e:
+        logger.error(f"Error initiating call: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 
 @app.api_route("/caller_join_conference/{session_id}", methods=["GET", "POST"])
@@ -143,7 +165,13 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     async def on_transcript(transcript: str):
         logger.info(f"[STT Transcript] {transcript}")
 
-        gpt_reply = get_openai_response(transcript)
+        # Get system info and generate prompt
+        session_info = call_manager.get_session_by_id(session_id)
+        system_info = session_info.get(CallInfo.SYSTEM_INFO.value, {}) if session_info else {}
+        system_prompt = generate_system_prompt(system_info)
+        
+        # Get GPT response
+        gpt_reply = get_openai_response(system_prompt, transcript)
         logger.info(f"[GPT Response] {gpt_reply}")
 
         # Check for 'redirect'

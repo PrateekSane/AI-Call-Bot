@@ -16,6 +16,9 @@ class CallManager:
         # A quick lookup of call_sid -> session_id
         self._call_to_session: Dict[str, str] = {}
 
+        # New mapping for bot numbers
+        self._number_to_session: Dict[str, str] = {}
+
     def create_new_session(self) -> str:
         """Create a new session_id and store an empty session."""
         with self._lock:
@@ -29,6 +32,10 @@ class CallManager:
                 CallInfo.USER_SID: None,
                 CallInfo.CONFERENCE_SID: None,
                 CallInfo.CONFERENCE_NAME: conference_name,
+                "bot_number": None,
+                "cs_number": None,
+                "target_number": None,
+                "system_info": {}
             }
             return session_id
 
@@ -41,10 +48,13 @@ class CallManager:
             self._call_to_session[call_sid] = session_id
 
     def set_session_value(self, session_id: str, key: str, value: Any):
-        """Set a particular field in a session, e.g. 'bot_call_sid'."""
+        """Set a particular field in a session."""
         with self._lock:
             if session_id in self._sessions:
                 self._sessions[session_id][key] = value
+                # If setting bot_number, update the number_to_session mapping
+                if key == "bot_number":
+                    self._number_to_session[value] = session_id
             else:
                 logger.error(f"Session {session_id} not found")
 
@@ -64,14 +74,26 @@ class CallManager:
         with self._lock:
             return self._sessions.get(session_id, {}).get(CallInfo.CONFERENCE_NAME)
 
+    def get_session_by_number(self, bot_number: str) -> Optional[Dict[str, Any]]:
+        """Get session information using the bot number."""
+        with self._lock:
+            session_id = self._number_to_session.get(bot_number)
+            return self._sessions.get(session_id) if session_id else None
+
     def delete_session(self, session_id: str):
         """Clean up session data once it's no longer needed."""
         with self._lock:
             if session_id in self._sessions:
-                # also remove any callSids referencing this session
+                # Remove bot number mapping
+                bot_number = self._sessions[session_id].get("bot_number")
+                if bot_number:
+                    self._number_to_session.pop(bot_number, None)
+                
+                # Remove call mappings
                 for call_sid, sid in list(self._call_to_session.items()):
                     if sid == session_id:
                         del self._call_to_session[call_sid]
+                
                 del self._sessions[session_id]
 
 # Singleton

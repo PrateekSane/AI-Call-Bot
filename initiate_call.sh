@@ -14,7 +14,7 @@ NGROK_URL="$(echo "$TUNNELS_JSON" | jq -r '.tunnels[0].public_url')"
 # NGROK_URL="$(echo "$TUNNELS_JSON" | jq -r '.tunnels[] | select(.proto=="https") | .public_url')"
 
 # 3. Construct the endpoint you want to call
-ENDPOINT="${NGROK_URL}/initiate-call"
+ENDPOINT="${NGROK_URL}/initiate-call?bot_number=+12028164470&cs_number=+14692105627&target_number=+19164729906"
 
 echo "Detected ngrok URL: $NGROK_URL"
 echo "Calling: $ENDPOINT"
