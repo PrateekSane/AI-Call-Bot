@@ -54,10 +54,10 @@ async def initiate_call(request: InitiateCallRequest, req: Request):
         session_id = call_manager.create_new_session()
         
         # Store all the call information in the session
-        call_manager.set_session_value(session_id, CallInfo.BOT_NUMBER.value, request.bot_number)
-        call_manager.set_session_value(session_id, CallInfo.CS_NUMBER.value, request.cs_number)
-        call_manager.set_session_value(session_id, CallInfo.USER_NUMBER.value, request.user_number)
-        call_manager.set_session_value(session_id, CallInfo.USER_INFO.value, request.user_info.model_dump())
+        call_manager.set_session_value(session_id, CallInfo.BOT_NUMBER, request.bot_number)
+        call_manager.set_session_value(session_id, CallInfo.CS_NUMBER, request.cs_number)
+        call_manager.set_session_value(session_id, CallInfo.USER_NUMBER, request.user_number)
+        call_manager.set_session_value(session_id, CallInfo.USER_INFO, request.user_info.model_dump())
 
         join_conference_url = f"https://{host}/caller_join_conference/{session_id}"
         call_events_url = f"https://{host}/call_events"
@@ -84,7 +84,7 @@ async def initiate_call(request: InitiateCallRequest, req: Request):
         call_manager.link_call_to_session(cs_call.sid, session_id)
         call_manager.set_session_value(session_id, CallInfo.CUSTOMER_SERVICE_SID, cs_call.sid)
         
-        return {"message": "Calls initiated", "session_id": session_id}
+        return {"message": "Calls initiated", "session_id": session_id, "cs_call_sid": cs_call.sid}
         
     except Exception as e:
         logger.error(f"Error initiating call: {e}")
@@ -133,7 +133,7 @@ async def incoming_call(request: Request):
 
     response = VoiceResponse()
     response.pause(length=1)
-    user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO.value)
+    user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO)
     print("USER INFO", user_info)
     user_name = user_info.get('user_name') if user_info else "unknown"
     response.say(f"Hi, I'm a helpful agent working for {user_name}")
@@ -167,7 +167,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
         logger.info(f"[STT Transcript] {transcript}")
 
         # Get user info and generate prompt
-        user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO.value)
+        user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO)
         system_prompt = generate_system_prompt(user_info)
         
         # Get GPT response
@@ -274,7 +274,7 @@ async def handle_user_call(request: Request):
     response = VoiceResponse()
     response.say(f"Connecting you with {session_data.user_info.get('user_name')} now. Thank you!")
 
-    bot_call_sid = call_manager.get_session_value(session_id, CallInfo.OUTBOUND_BOT_SID.value)
+    bot_call_sid = call_manager.get_session_value(session_id, CallInfo.OUTBOUND_BOT_SID)
     end_call(twilio_client, bot_call_sid)
     
     # Add the caller to the conference

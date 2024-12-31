@@ -1,8 +1,8 @@
 import threading
 import uuid
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Union
 
-from backend.core.constants import CallInfo
+from backend.core.constants import CallInfo, UserInformationKeys
 from backend.core.models import SessionData, CallSids
 from backend.utils.utils import logger
 
@@ -13,6 +13,12 @@ class CallManager:
         self._sessions: Dict[str, SessionData] = {}
         self._call_to_session: Dict[str, str] = {}
         self._number_to_session: Dict[str, str] = {}
+
+    def _get_key_value(self, key: Union[str, CallInfo, UserInformationKeys]) -> str:
+        """Convert enum to string if needed."""
+        if isinstance(key, (CallInfo, UserInformationKeys)):
+            return key.value
+        return key
 
     def create_new_session(self) -> str:
         """Create a new session_id and store an empty session."""
@@ -37,7 +43,7 @@ class CallManager:
                 return
             self._call_to_session[call_sid] = session_id
 
-    def set_session_value(self, session_id: str, key: str, value: Any):
+    def set_session_value(self, session_id: str, key: Union[str, CallInfo], value: Any):
         """Set a particular field in a session."""
         with self._lock:
             if session_id not in self._sessions:
@@ -45,6 +51,7 @@ class CallManager:
                 return
                 
             session = self._sessions[session_id]
+            key = self._get_key_value(key)
             
             # Update the appropriate field based on the key
             if key == CallInfo.BOT_NUMBER.value:
@@ -70,7 +77,7 @@ class CallManager:
             elif key == CallInfo.USER_SID.value:
                 session.call_sids.user = value
 
-    def get_session_value(self, session_id: str, key: str) -> Optional[Any]:
+    def get_session_value(self, session_id: str, key: Union[str, CallInfo]) -> Optional[Any]:
         """Get a particular field from a session."""
         with self._lock:
             if session_id not in self._sessions:
@@ -78,6 +85,7 @@ class CallManager:
                 return None
             
             session = self._sessions[session_id]
+            key = self._get_key_value(key)
             
             # Get the appropriate field based on the key
             if key == CallInfo.BOT_NUMBER.value:
