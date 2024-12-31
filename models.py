@@ -9,7 +9,7 @@ class UserInformation(BaseModel):
     user_email: str
     reason_for_call: str
     account_number: str
-    arbitrary: Dict[str, str] = Field(default_factory=dict)
+    additional_info: Dict[str, str] = Field(default_factory=dict)
 
 
 class CallSids(BaseModel):
@@ -30,7 +30,7 @@ class SessionData(BaseModel):
     # Phone numbers
     bot_number: Optional[str] = None
     cs_number: Optional[str] = None
-    target_number: Optional[str] = None
+    user_number: Optional[str] = None
     
     # Call SIDs
     call_sids: CallSids = Field(default_factory=CallSids)
@@ -43,5 +43,5 @@ class InitiateCallRequest(BaseModel):
     """Main request model for initiating a call"""
     bot_number: str = Field(..., pattern=r'^\+\d{11}$')  # Enforce E.164 format
     cs_number: str = Field(..., pattern=r'^\+\d{11}$')
-    target_number: str = Field(..., pattern=r'^\+\d{11}$')
+    user_number: str = Field(..., pattern=r'^\+\d{11}$')
     user_info: UserInformation 

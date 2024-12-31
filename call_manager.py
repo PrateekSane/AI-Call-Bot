@@ -52,13 +52,13 @@ class CallManager:
                 self._number_to_session[value] = session_id
             elif key == CallInfo.CS_NUMBER.value:
                 session.cs_number = value
-            elif key == CallInfo.TARGET_NUMBER.value:
-                session.target_number = value
+            elif key == CallInfo.USER_NUMBER.value:
+                session.user_number = value
             elif key == CallInfo.CONFERENCE_SID.value:
                 session.conference_sid = value
             elif key == CallInfo.TWILIO_STREAM_SID.value:
                 session.twilio_stream_sid = value
-            elif key == CallInfo.SYSTEM_INFO.value:
+            elif key == CallInfo.USER_INFO.value:
                 session.user_info = value
             # Handle call SIDs
             elif key == CallInfo.OUTBOUND_BOT_SID.value:

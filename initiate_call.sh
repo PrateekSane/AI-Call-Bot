@@ -20,8 +20,8 @@ ENDPOINT="${NGROK_URL}/initiate-call"
 JSON_PAYLOAD='{
     "bot_number": "+12028164470",
     "cs_number": "+14692105627",
-    "target_number": "+19164729906",
-    "system_info": {
+    "user_number": "+19164729906",
+    "user_info": {
         "user_name": "John Smith",
         "user_email": "john.smith@example.com",
         "reason_for_call": "Double charge on Spotify subscription for $9.99 on March 15th",

@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.rest import Client
-from twilio.twiml.voice_response import Connect, Say, Stream, VoiceResponse
+from twilio.twiml.voice_response import Connect, VoiceResponse
 from twilio_utils import create_call, create_conference, is_redirect, end_call
 
 from constants import CallInfo
@@ -19,7 +19,7 @@ from deepgram_handler import (
     synthesize_speech
 )
 from openai_utils import get_openai_response
-from prompts import user_name
+from prompts import generate_system_prompt
 from utils import logger, twilio_client
 from models import InitiateCallRequest
 
@@ -58,7 +58,7 @@ async def initiate_call(request: InitiateCallRequest):
         call_manager.set_session_value(session_id, CallInfo.BOT_NUMBER.value, request.bot_number)
         call_manager.set_session_value(session_id, CallInfo.CS_NUMBER.value, request.cs_number)
         call_manager.set_session_value(session_id, CallInfo.TARGET_NUMBER.value, request.target_number)
-        call_manager.set_session_value(session_id, CallInfo.SYSTEM_INFO.value, request.system_info.dict())
+        call_manager.set_session_value(session_id, CallInfo.USER_INFO.value, request.system_info.dict())
 
         join_conference_url = f"https://{host}/caller_join_conference/{session_id}"
         call_events_url = f"https://{host}/call_events"
@@ -117,13 +117,26 @@ async def incoming_call(request: Request):
     print("FORM DATA", form_data)
     print("QUERY PARAMS", request.query_params)
     incoming_call_sid = form_data.get('CallSid')
-    # PROBLEM IS THAT INCOMING_CALL_SID IS NOT IN CALL MANAGER
+    incoming_number = form_data.get('From')
+    
+    # Get session_id from the incoming number
+    session_data = call_manager.get_session_by_number(incoming_number)
+    if not session_data:
+        logger.error(f"No session found for incoming number: {incoming_number}")
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Session not found"}
+        )
+    
+    session_id = session_data.session_id
+    
     call_manager.link_call_to_session(incoming_call_sid, session_id)
     call_manager.set_session_value(session_id, CallInfo.INBOUND_BOT_SID, incoming_call_sid)
 
     response = VoiceResponse()
     response.pause(length=1)
-    response.say(f"Hi, Im an helpful agent working for {user_name}")
+    user_name = session_data.user_info.user_name if session_data.user_info else "unknown"
+    response.say(f"Hi, I'm a helpful agent working for {user_name}")
 
 
     connect = Connect()
@@ -155,8 +168,8 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
 
         # Get system info and generate prompt
         session_info = call_manager.get_session_by_id(session_id)
-        system_info = session_info.get(CallInfo.SYSTEM_INFO.value, {}) if session_info else {}
-        system_prompt = generate_system_prompt(system_info)
+        user_info = session_info.get(CallInfo.USER_INFO.value, {}) if session_info else {}
+        system_prompt = generate_system_prompt(user_info)
         
         # Get GPT response
         gpt_reply = get_openai_response(system_prompt, transcript)
@@ -232,10 +245,11 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
 def dial_user(call_url, session_id):
     """Dial the user number when redirect is detected"""
     try:
+        session_data = call_manager.get_session_by_id(session_id)
         call = create_call(
             twilio_client,
-            to=user_phone_number,
-            from_=TWILIO_PHONE_NUMBER,
+            to=session_data.user_number,
+            from_=session_data.bot_number,
             url=f"https://{call_url}/handle_user_call",
             status_callback=f"https://{call_url}/call_events",
             status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
@@ -255,18 +269,18 @@ async def handle_user_call(request: Request):
     host = request.url.hostname
     form_data = await request.form()
     session_id = form_data.get('CallSid')
+    session_data = call_manager.get_session_by_id(session_id)
 
     response = VoiceResponse()
-    response.say(f"Connecting you with {user_name} now. Thank you!")
+    response.say(f"Connecting you with {session_data.user_info.user_name} now. Thank you!")
 
-    session_info = call_manager.get_session_by_id(session_id)
-    bot_call_sid = session_info.get(CallInfo.BOT_SID)
+    bot_call_sid = session_data.call_sids.outbound_bot
     end_call(twilio_client, bot_call_sid)
     
     # Add the caller to the conference
     response.append(
         create_conference(
-            conference_name=call_manager.get_conference_name(session_id),
+            conference_name=session_data.conference_name,
             call_events_url=f"https://{host}/conference_events/{session_id}",
             start_conference_on_enter=False,
             end_conference_on_exit=True

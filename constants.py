@@ -11,8 +11,8 @@ class CallInfo(Enum):
     TWILIO_STREAM_SID = 'twilio_stream_sid'
     BOT_NUMBER = 'bot_number'
     CS_NUMBER = 'cs_number'
-    TARGET_NUMBER = 'target_number'
-    SYSTEM_INFO = 'system_info'
+    USER_NUMBER = 'user_number'
+    USER_INFO = 'user_info'
 
 class UserInformationKeys(Enum):
     USER_NAME = 'user_name'
@@ -35,11 +35,3 @@ Account Number: {account_number}
 You need to give the customer service agent the best possible information about the user so that they can help them. 
 When you get stuck or you have given the customer service agent all the information you can, say "I need to REDIRECT you to a human agent". 
 Do not make up information."""
-
-DEFAULT_SYSTEM_INFO = {
-    UserInformationKeys.USER_NAME.value: "John Doe",
-    UserInformationKeys.USER_EMAIL.value: "john.doe@example.com",
-    UserInformationKeys.REASON_FOR_CALL.value: "General inquiry",
-    UserInformationKeys.ACCOUNT_NUMBER.value: "",
-    UserInformationKeys.ADDITIONAL_INFO.value: {}
-}
