@@ -14,12 +14,6 @@ class CallManager:
         self._call_to_session: Dict[str, str] = {}
         self._number_to_session: Dict[str, str] = {}
 
-    def _get_key_value(self, key: Union[str, CallInfo, UserInformationKeys]) -> str:
-        """Convert enum to string if needed."""
-        if isinstance(key, (CallInfo, UserInformationKeys)):
-            return key.value
-        return key
-
     def create_new_session(self) -> str:
         """Create a new session_id and store an empty session."""
         with self._lock:
@@ -149,6 +143,28 @@ class CallManager:
                         del self._call_to_session[call_sid]
                 
                 del self._sessions[session_id]
+
+    def set_stream_ready(self, session_id: str, ready: bool = True):
+        """Set whether the session is ready to begin streaming."""
+        with self._lock:
+            if session_id not in self._sessions:
+                logger.error(f"Session {session_id} not found")
+                return
+            self._sessions[session_id].ready_for_stream = ready
+
+    def is_stream_ready(self, session_id: str) -> bool:
+        """Check if the session is ready to begin streaming."""
+        with self._lock:
+            if session_id not in self._sessions:
+                logger.error(f"Session {session_id} not found")
+                return False
+            return self._sessions[session_id].ready_for_stream
+
+    def _get_key_value(self, key: Union[str, CallInfo, UserInformationKeys]) -> str:
+        """Convert enum to string if needed."""
+        if isinstance(key, (CallInfo, UserInformationKeys)):
+            return key.value
+        return key
 
 
 # Singleton
