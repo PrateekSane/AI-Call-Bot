@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
-from twilio.rest import Client
 from twilio.twiml.voice_response import Connect, VoiceResponse
 
 from backend.core.constants import CallInfo

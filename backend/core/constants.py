@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class CallInfo(Enum):
     SESSION = 'session_id'
     OUTBOUND_BOT_SID = 'outbound_bot_call_sid'
@@ -14,12 +15,14 @@ class CallInfo(Enum):
     USER_NUMBER = 'user_number'
     USER_INFO = 'user_info'
 
+
 class UserInformationKeys(Enum):
     USER_NAME = 'user_name'
     USER_EMAIL = 'user_email'
     REASON_FOR_CALL = 'reason_for_call'
     ACCOUNT_NUMBER = 'account_number'
     ADDITIONAL_INFO = 'additional_info'
+
 
 SYSTEM_PROMPT_TEMPLATE = """You are the {user_name}'s helpful assistant and you are calling on their behalf to a customer service agent. YOU ARE NOT {user_name}.
 You are given the following pieces of information about {user_name}. Use this information to help the customer service agent. Keep your responses concise and to the point.

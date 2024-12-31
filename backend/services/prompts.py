@@ -1,6 +1,6 @@
 from typing import Dict, Any
 
-from constants import UserInformationKeys, SYSTEM_PROMPT_TEMPLATE
+from backend.core.constants import UserInformationKeys, SYSTEM_PROMPT_TEMPLATE
 
 
 def generate_system_prompt(system_info: Dict[str, Any] = None) -> str:

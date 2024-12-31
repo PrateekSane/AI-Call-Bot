@@ -2,9 +2,9 @@ import threading
 import uuid
 from typing import Dict, Optional, Any
 
-from constants import CallInfo
-from models import SessionData, CallSids
-from utils import logger
+from backend.core.constants import CallInfo
+from backend.core.models import SessionData, CallSids
+from backend.utils.utils import logger
 
 
 class CallManager:
