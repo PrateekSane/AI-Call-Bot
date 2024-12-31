@@ -1,22 +1,17 @@
 import threading
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Optional, Any
 
 from constants import CallInfo
+from models import SessionData, CallSids
 from utils import logger
 
 
 class CallManager:
     def __init__(self):
         self._lock = threading.Lock()
-        # session_data keyed by a unique session_id
-        # Each session might contain bot_call_sid, cs_call_sid, user_call_sid, etc.
-        self._sessions: Dict[str, Dict[str, Any]] = {}
-        
-        # A quick lookup of call_sid -> session_id
+        self._sessions: Dict[str, SessionData] = {}
         self._call_to_session: Dict[str, str] = {}
-
-        # New mapping for bot numbers
         self._number_to_session: Dict[str, str] = {}
 
     def create_new_session(self) -> str:
@@ -24,19 +19,14 @@ class CallManager:
         with self._lock:
             session_id = str(uuid.uuid4())
             conference_name = str(uuid.uuid4())
-            self._sessions[session_id] = {
-                CallInfo.SESSION: session_id,
-                CallInfo.OUTBOUND_BOT_SID: None,
-                CallInfo.INBOUND_BOT_SID: None,
-                CallInfo.CUSTOMER_SERVICE_SID: None,
-                CallInfo.USER_SID: None,
-                CallInfo.CONFERENCE_SID: None,
-                CallInfo.CONFERENCE_NAME: conference_name,
-                "bot_number": None,
-                "cs_number": None,
-                "target_number": None,
-                "system_info": {}
-            }
+            
+            session = SessionData(
+                session_id=session_id,
+                conference_name=conference_name,
+                call_sids=CallSids()
+            )
+            
+            self._sessions[session_id] = session
             return session_id
 
     def link_call_to_session(self, call_sid: str, session_id: str):
@@ -50,32 +40,53 @@ class CallManager:
     def set_session_value(self, session_id: str, key: str, value: Any):
         """Set a particular field in a session."""
         with self._lock:
-            if session_id in self._sessions:
-                self._sessions[session_id][key] = value
-                # If setting bot_number, update the number_to_session mapping
-                if key == "bot_number":
-                    self._number_to_session[value] = session_id
-            else:
+            if session_id not in self._sessions:
                 logger.error(f"Session {session_id} not found")
+                return
+                
+            session = self._sessions[session_id]
+            
+            # Update the appropriate field based on the key
+            if key == CallInfo.BOT_NUMBER.value:
+                session.bot_number = value
+                self._number_to_session[value] = session_id
+            elif key == CallInfo.CS_NUMBER.value:
+                session.cs_number = value
+            elif key == CallInfo.TARGET_NUMBER.value:
+                session.target_number = value
+            elif key == CallInfo.CONFERENCE_SID.value:
+                session.conference_sid = value
+            elif key == CallInfo.TWILIO_STREAM_SID.value:
+                session.twilio_stream_sid = value
+            elif key == CallInfo.SYSTEM_INFO.value:
+                session.user_info = value
+            # Handle call SIDs
+            elif key == CallInfo.OUTBOUND_BOT_SID.value:
+                session.call_sids.outbound_bot = value
+            elif key == CallInfo.INBOUND_BOT_SID.value:
+                session.call_sids.inbound_bot = value
+            elif key == CallInfo.CUSTOMER_SERVICE_SID.value:
+                session.call_sids.customer_service = value
+            elif key == CallInfo.USER_SID.value:
+                session.call_sids.user = value
 
-    def get_session_for_call(self, call_sid: str) -> Optional[Dict[str, Any]]:
-        """Given a callSid, return the session dict it belongs to, or None."""
+    def get_session_for_call(self, call_sid: str) -> Optional[SessionData]:
+        """Given a callSid, return the session it belongs to, or None."""
         with self._lock:
             session_id = self._call_to_session.get(call_sid)
-            if session_id:
-                return self._sessions.get(session_id)
-            return None
+            return self._sessions.get(session_id) if session_id else None
 
-    def get_session_by_id(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session_by_id(self, session_id: str) -> Optional[SessionData]:
         with self._lock:
             return self._sessions.get(session_id)
 
     def get_conference_name(self, session_id: str) -> Optional[str]:
         with self._lock:
-            return self._sessions.get(session_id, {}).get(CallInfo.CONFERENCE_NAME)
+            session = self._sessions.get(session_id)
+            return session.conference_name if session else None
 
-    def get_session_by_number(self, bot_number: str) -> Optional[Dict[str, Any]]:
-        """Get session information using the bot number."""
+    def get_session_by_number(self, bot_number: str) -> Optional[SessionData]:
+        """Get session using the bot number."""
         with self._lock:
             session_id = self._number_to_session.get(bot_number)
             return self._sessions.get(session_id) if session_id else None
@@ -84,10 +95,11 @@ class CallManager:
         """Clean up session data once it's no longer needed."""
         with self._lock:
             if session_id in self._sessions:
+                session = self._sessions[session_id]
+                
                 # Remove bot number mapping
-                bot_number = self._sessions[session_id].get("bot_number")
-                if bot_number:
-                    self._number_to_session.pop(bot_number, None)
+                if session.bot_number:
+                    self._number_to_session.pop(session.bot_number, None)
                 
                 # Remove call mappings
                 for call_sid, sid in list(self._call_to_session.items()):
@@ -95,6 +107,7 @@ class CallManager:
                         del self._call_to_session[call_sid]
                 
                 del self._sessions[session_id]
+
 
 # Singleton
 call_manager = CallManager()

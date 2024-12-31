@@ -21,6 +21,7 @@ from deepgram_handler import (
 from openai_utils import get_openai_response
 from prompts import user_name
 from utils import logger, twilio_client
+from models import InitiateCallRequest
 
 load_dotenv('env/.env')
 
@@ -47,50 +48,37 @@ async def index_page():
     return {"message": "Twilio Media Stream Server is running!"}
 
 
-@app.api_route("/initiate-call", methods=["GET", "POST"])
-async def initiate_call(request: Request):
+@app.api_route("/initiate-call", methods=["POST"])
+async def initiate_call(request: InitiateCallRequest):
     try:
-        # Get JSON data from request
-        data = await request.json()
-        bot_number = data.get("bot_number")
-        cs_number = data.get("cs_number")
-        target_number = data.get("target_number")
-        system_info = data.get("system_info", {})  # Additional fields for system prompt
-        
-        if not all([bot_number, cs_number, target_number]):
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Missing required fields"}
-            )
-
         host = request.url.hostname
         session_id = call_manager.create_new_session()
         
         # Store all the call information in the session
-        call_manager.set_session_value(session_id, "bot_number", bot_number)
-        call_manager.set_session_value(session_id, "cs_number", cs_number)
-        call_manager.set_session_value(session_id, "target_number", target_number)
-        call_manager.set_session_value(session_id, "system_info", system_info)
+        call_manager.set_session_value(session_id, CallInfo.BOT_NUMBER.value, request.bot_number)
+        call_manager.set_session_value(session_id, CallInfo.CS_NUMBER.value, request.cs_number)
+        call_manager.set_session_value(session_id, CallInfo.TARGET_NUMBER.value, request.target_number)
+        call_manager.set_session_value(session_id, CallInfo.SYSTEM_INFO.value, request.system_info.dict())
 
         join_conference_url = f"https://{host}/caller_join_conference/{session_id}"
         call_events_url = f"https://{host}/call_events"
         
-        # Rest of your existing call creation code...
+        # Create bot call
         bot_call = create_call(
             twilio_client, 
-            to=bot_number,
-            from_=bot_number,
+            to=request.bot_number,
+            from_=request.bot_number,
             url=join_conference_url,
             status_callback=call_events_url
         )
         call_manager.link_call_to_session(bot_call.sid, session_id)
         call_manager.set_session_value(session_id, CallInfo.OUTBOUND_BOT_SID, bot_call.sid)
 
-        # Create customer service call...
+        # Create customer service call
         cs_call = create_call(
             twilio_client,
-            to=cs_number,
-            from_=bot_number,
+            to=request.cs_number,
+            from_=request.bot_number,
             url=join_conference_url,
             status_callback=call_events_url
         )

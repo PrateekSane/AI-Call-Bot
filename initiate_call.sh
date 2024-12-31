@@ -14,11 +14,34 @@ NGROK_URL="$(echo "$TUNNELS_JSON" | jq -r '.tunnels[0].public_url')"
 # NGROK_URL="$(echo "$TUNNELS_JSON" | jq -r '.tunnels[] | select(.proto=="https") | .public_url')"
 
 # 3. Construct the endpoint you want to call
-ENDPOINT="${NGROK_URL}/initiate-call?bot_number=+12028164470&cs_number=+14692105627&target_number=+19164729906"
+ENDPOINT="${NGROK_URL}/initiate-call"
+
+# Sample JSON payload
+JSON_PAYLOAD='{
+    "bot_number": "+12028164470",
+    "cs_number": "+14692105627",
+    "target_number": "+19164729906",
+    "system_info": {
+        "user_name": "John Smith",
+        "user_email": "john.smith@example.com",
+        "reason_for_call": "Double charge on Spotify subscription for $9.99 on March 15th",
+        "account_number": "4122563242",
+        "additional_info": {
+            "subscription_type": "Spotify Premium",
+            "charge_date": "2024-03-15",
+            "charge_amount": "$9.99",
+            "billing_cycle": "Monthly"
+        }
+    }
+}'
 
 echo "Detected ngrok URL: $NGROK_URL"
 echo "Calling: $ENDPOINT"
+echo "With payload:"
+echo "$JSON_PAYLOAD" | jq '.'
 
-# 4. Make the POST request
-curl -X POST "$ENDPOINT"
+# 4. Make the POST request with JSON payload
+curl -X POST "$ENDPOINT" \
+    -H "Content-Type: application/json" \
+    -d "$JSON_PAYLOAD"
 echo
