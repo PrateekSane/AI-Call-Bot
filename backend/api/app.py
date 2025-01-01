@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import asyncio
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket
@@ -8,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import Connect, VoiceResponse
 
-from backend.core.constants import CallInfo
+from backend.core.constants import CallInfo, CallStatus
 from backend.core.call_manager import call_manager
 from backend.core.models import InitiateCallRequest
 from backend.services.deepgram_handler import (
@@ -147,18 +148,31 @@ async def incoming_call(request: Request):
 
 @app.websocket("/media-stream/{session_id}")
 async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
-    """
-    1. Accept the Twilio WebSocket.
-    2. Create a Deepgram STT connection.
-    3. On each transcript from Deepgram, call GPT -> TTS -> Twilio.
-    4. If GPT says "redirect", call dial_user.
-    """
-    logger.info("Twilio WebSocket connected.")
+    """Handle media stream after customer service agent connects."""
+    logger.info("Twilio WebSocket connection request received.")
+    
+    # Accept the websocket connection
+    await twilio_websocket.accept()
+    
+    # Wait for the session to be ready (timeout after 30 seconds)
+    timeout = 30
+    start_time = asyncio.get_event_loop().time()
+    
+    while not call_manager.is_stream_ready(session_id):
+        if asyncio.get_event_loop().time() - start_time > timeout:
+            logger.info("Timeout waiting for session to be ready")
+            await twilio_websocket.close()
+            return
+            
+        await asyncio.sleep(1)  # Check every second
+        
+    logger.info("Session ready, proceeding with media stream handling")
+    
     session_info = call_manager.get_session_by_id(session_id)
     if not session_info:
-        logger.error(f"Session not found for CallSid: {session_id}. BE CAREFUL")
-
-    await twilio_websocket.accept()
+        logger.error(f"Session not found for CallSid: {session_id}")
+        await twilio_websocket.close()
+        return
 
     # We'll store the streamSid Twilio sends so we can route our TTS back to Twilio
     twilio_stream_sid = None
@@ -251,8 +265,6 @@ def dial_user(call_url, session_id):
             from_=session_data.bot_number,
             url=f"https://{call_url}/handle_user_call",
             status_callback=f"https://{call_url}/call_events",
-            status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
-            status_callback_method='POST'
         )
         call_manager.set_session_value(session_id, CallInfo.USER_SID, call.sid)
 
@@ -330,29 +342,31 @@ async def call_events(request: Request):
     """Handle call events"""
     try:
         form_data = await request.form()
-        event_type = form_data.get('StatusCallbackEvent')
+        event_type = form_data.get('CallStatus')
         call_sid = form_data.get('CallSid')
-        parent_call_sid = form_data.get('ParentCallSid')
-        conference_sid = form_data.get('ConferenceSid')
-
-        logger.debug(f"Received call event: {event_type}")
-        logger.debug(f"Call SID: {call_sid}")
-        logger.debug(f"Parent Call SID: {parent_call_sid}")
-        logger.debug(f"Conference SID: {conference_sid}")
-
-        if event_type == 'initiated':
-            logger.debug(f"Call initiated with SID: {call_sid}")
-        elif event_type == 'ringing':
-            logger.debug(f"Call ringing with SID: {call_sid}")
-        elif event_type == 'answered':
-            logger.debug(f"Call answered with SID: {call_sid}")
-        elif event_type == 'completed':
+        
+        # Get the session associated with this call
+        session_data = call_manager.get_session_for_call(call_sid)
+        if not session_data:
+            logger.error(f"No session found for call {call_sid}")
+            return '', 200
+        if event_type == CallStatus.IN_PROGRESS.value:
+            logger.debug(f"Call in progress with SID: {call_sid}")
+            # Check if this is the customer service call
+            if call_sid == session_data.call_sids.customer_service:
+                logger.info("Customer service agent connected, setting stream ready")
+                call_manager.set_stream_ready(session_data.session_id, True)
+                
+        elif event_type == CallStatus.COMPLETED.value:
             logger.debug(f"Call completed with SID: {call_sid}")
-        else:
-            logger.debug(f"Unhandled call event type: {event_type}")
+            # If customer service disconnects, mark stream as not ready
+            if call_sid == session_data.call_sids.customer_service:
+                call_manager.set_stream_ready(session_data.session_id, False)
+                
+        # ... rest of your existing code ...
+        
     except Exception as e:
         logger.error(f"Error handling call event: {e}")
-    logger.debug(f"Call event: {request}")
     return '', 200
 
 

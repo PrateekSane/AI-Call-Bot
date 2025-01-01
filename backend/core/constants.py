@@ -38,3 +38,10 @@ Account Number: {account_number}
 You need to give the customer service agent the best possible information about the user so that they can help them. 
 When you get stuck or you have given the customer service agent all the information you can, say "I need to REDIRECT you to a human agent". 
 Do not make up information."""
+
+
+class CallStatus(Enum):
+    INITIATED = 'initiated'
+    RINGING = 'ringing'
+    IN_PROGRESS = 'in-progress'
+    COMPLETED = 'completed'

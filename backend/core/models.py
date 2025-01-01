@@ -36,6 +36,9 @@ class SessionData(BaseModel):
     
     # User information
     user_info: Optional[UserInformation] = None
+    
+    # Ready for stream
+    ready_for_stream: bool = False
 
 
 class InitiateCallRequest(BaseModel):
