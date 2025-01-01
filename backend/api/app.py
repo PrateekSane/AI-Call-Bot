@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import Connect, VoiceResponse
 
-from backend.core.constants import CallInfo
+from backend.core.constants import CallInfo, CallStatus
 from backend.core.call_manager import call_manager
 from backend.core.models import InitiateCallRequest
 from backend.services.deepgram_handler import (
@@ -160,7 +160,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     
     while not call_manager.is_stream_ready(session_id):
         if asyncio.get_event_loop().time() - start_time > timeout:
-            logger.error("Timeout waiting for session to be ready")
+            logger.info("Timeout waiting for session to be ready")
             await twilio_websocket.close()
             return
             
@@ -265,8 +265,6 @@ def dial_user(call_url, session_id):
             from_=session_data.bot_number,
             url=f"https://{call_url}/handle_user_call",
             status_callback=f"https://{call_url}/call_events",
-            status_callback_event=['initiated', 'ringing', 'answered', 'completed'],
-            status_callback_method='POST'
         )
         call_manager.set_session_value(session_id, CallInfo.USER_SID, call.sid)
 
@@ -344,7 +342,7 @@ async def call_events(request: Request):
     """Handle call events"""
     try:
         form_data = await request.form()
-        event_type = form_data.get('StatusCallbackEvent')
+        event_type = form_data.get('CallStatus')
         call_sid = form_data.get('CallSid')
         
         # Get the session associated with this call
@@ -352,15 +350,14 @@ async def call_events(request: Request):
         if not session_data:
             logger.error(f"No session found for call {call_sid}")
             return '', 200
-            
-        if event_type == 'answered':
-            logger.debug(f"Call answered with SID: {call_sid}")
+        if event_type == CallStatus.IN_PROGRESS.value:
+            logger.debug(f"Call in progress with SID: {call_sid}")
             # Check if this is the customer service call
             if call_sid == session_data.call_sids.customer_service:
                 logger.info("Customer service agent connected, setting stream ready")
                 call_manager.set_stream_ready(session_data.session_id, True)
                 
-        elif event_type == 'completed':
+        elif event_type == CallStatus.COMPLETED.value:
             logger.debug(f"Call completed with SID: {call_sid}")
             # If customer service disconnects, mark stream as not ready
             if call_sid == session_data.call_sids.customer_service:
