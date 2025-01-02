@@ -24,9 +24,15 @@ class UserInformationKeys(Enum):
     ADDITIONAL_INFO = 'additional_info'
 
 
+class TwilioCallStatus(Enum):
+    INITIATED = 'initiated'
+    RINGING = 'ringing'
+    IN_PROGRESS = 'in-progress'
+    COMPLETED = 'completed'
+
+
 SYSTEM_PROMPT_TEMPLATE = """You are the {user_name}'s helpful assistant and you are calling on their behalf to a customer service agent. YOU ARE NOT {user_name}.
 You are given the following pieces of information about {user_name}. Use this information to help the customer service agent. Keep your responses concise and to the point.
-Make sure you mention the account number when ONLY asked for it. 
 ONLY mention the reason for call initially.
 
 User Name: {user_name}
@@ -38,10 +44,3 @@ Account Number: {account_number}
 You need to give the customer service agent the best possible information about the user so that they can help them. 
 When you get stuck or you have given the customer service agent all the information you can, say "I need to REDIRECT you to a human agent". 
 Do not make up information."""
-
-
-class CallStatus(Enum):
-    INITIATED = 'initiated'
-    RINGING = 'ringing'
-    IN_PROGRESS = 'in-progress'
-    COMPLETED = 'completed'

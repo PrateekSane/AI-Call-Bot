@@ -1,9 +1,9 @@
 import threading
 import uuid
-from typing import Dict, Optional, Any, Union
+from typing import Dict, Optional, Any, Union, List
 
 from backend.core.constants import CallInfo, UserInformationKeys
-from backend.core.models import SessionData, CallSids
+from backend.core.models import SessionData, CallSids, ChatMessage
 from backend.utils.utils import logger
 
 
@@ -159,6 +159,27 @@ class CallManager:
                 logger.error(f"Session {session_id} not found")
                 return False
             return self._sessions[session_id].ready_for_stream
+
+    def add_to_chat_history(self, session_id: str, role: str, content: str):
+        """Add a message to the session's chat history."""
+        with self._lock:
+            if session_id not in self._sessions:
+                logger.error(f"Session {session_id} not found")
+                return
+            self._sessions[session_id].chat_history.append(
+                ChatMessage(role=role, content=content)
+            )
+
+    def get_chat_history(self, session_id: str) -> List[Dict[str, str]]:
+        """Get the chat history for a session."""
+        with self._lock:
+            if session_id not in self._sessions:
+                logger.error(f"Session {session_id} not found")
+                return []
+            return [
+                {"role": msg.role, "content": msg.content} 
+                for msg in self._sessions[session_id].chat_history
+            ]
 
     def _get_key_value(self, key: Union[str, CallInfo, UserInformationKeys]) -> str:
         """Convert enum to string if needed."""

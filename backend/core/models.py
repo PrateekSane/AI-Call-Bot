@@ -1,5 +1,11 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
+
+
+class ChatMessage(BaseModel):
+    """Individual chat message for history"""
+    role: str
+    content: str
 
 
 class UserInformation(BaseModel):
@@ -39,6 +45,9 @@ class SessionData(BaseModel):
     
     # Ready for stream
     ready_for_stream: bool = False
+    
+    # Chat history
+    chat_history: List[ChatMessage] = Field(default_factory=list)
 
 
 class InitiateCallRequest(BaseModel):

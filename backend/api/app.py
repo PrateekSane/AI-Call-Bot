@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import Connect, VoiceResponse
 
-from backend.core.constants import CallInfo, CallStatus
+from backend.core.constants import CallInfo, TwilioCallStatus
 from backend.core.call_manager import call_manager
 from backend.core.models import InitiateCallRequest
 from backend.services.deepgram_handler import (
@@ -160,7 +160,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     
     while not call_manager.is_stream_ready(session_id):
         if asyncio.get_event_loop().time() - start_time > timeout:
-            logger.info("Timeout waiting for session to be ready")
+            logger.ifno("Timeout waiting for session to be ready")
             await twilio_websocket.close()
             return
             
@@ -184,9 +184,18 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
         user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO)
         system_prompt = generate_system_prompt(user_info)
         
+        # Add user message to history
+        call_manager.add_to_chat_history(session_id, "user", transcript)
+        
+        # Get chat history
+        chat_history = call_manager.get_chat_history(session_id)
+        
         # Get GPT response
-        gpt_reply = get_openai_response(system_prompt, transcript)
+        gpt_reply = get_openai_response(system_prompt, transcript, chat_history)
         logger.info(f"[GPT Response] {gpt_reply}")
+
+        # Add assistant response to history
+        call_manager.add_to_chat_history(session_id, "assistant", gpt_reply)
 
         # Check for 'redirect'
         if is_redirect(gpt_reply):
@@ -344,27 +353,24 @@ async def call_events(request: Request):
         form_data = await request.form()
         event_type = form_data.get('CallStatus')
         call_sid = form_data.get('CallSid')
-        
         # Get the session associated with this call
         session_data = call_manager.get_session_for_call(call_sid)
         if not session_data:
             logger.error(f"No session found for call {call_sid}")
             return '', 200
-        if event_type == CallStatus.IN_PROGRESS.value:
+        if event_type == TwilioCallStatus.IN_PROGRESS.value:
             logger.debug(f"Call in progress with SID: {call_sid}")
             # Check if this is the customer service call
             if call_sid == session_data.call_sids.customer_service:
                 logger.info("Customer service agent connected, setting stream ready")
                 call_manager.set_stream_ready(session_data.session_id, True)
                 
-        elif event_type == CallStatus.COMPLETED.value:
+        elif event_type == TwilioCallStatus.COMPLETED.value:
             logger.debug(f"Call completed with SID: {call_sid}")
             # If customer service disconnects, mark stream as not ready
             if call_sid == session_data.call_sids.customer_service:
                 call_manager.set_stream_ready(session_data.session_id, False)
                 
-        # ... rest of your existing code ...
-        
     except Exception as e:
         logger.error(f"Error handling call event: {e}")
     return '', 200
