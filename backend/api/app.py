@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import asyncio
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, WebSocket
@@ -18,8 +19,7 @@ from backend.services.deepgram_handler import (
     create_deepgram_stt_connection,
     synthesize_speech
 )
-from backend.services.openai_utils import get_openai_response
-from backend.services.prompts import generate_system_prompt
+from backend.services.openai_utils import invoke_gpt
 from backend.services.twilio_utils import create_call, create_conference, is_redirect, end_call
 from backend.utils.utils import logger, twilio_client
 
@@ -146,6 +146,45 @@ async def incoming_call(request: Request):
     return HTMLResponse(content=str(response), media_type="application/xml")
 
 
+async def handle_stt_transcript(
+    transcript: str,
+    session_id: str,
+    stream_sid: Optional[str],
+    websocket: Optional[WebSocket]
+):
+    if not websocket or not stream_sid:
+        raise ValueError("No websocket or streamSid provided. Not sending TTS audio.")
+
+    gpt_reply = await invoke_gpt(transcript, session_id)
+
+    # Check for 'redirect'
+    if is_redirect(gpt_reply):
+        call_url = websocket.url.hostname
+        dial_user(call_url, session_id)
+
+    # Synthesize GPT text with Deepgram TTS
+    tts_mp3 = await synthesize_speech(gpt_reply)
+    if not tts_mp3:
+        return gpt_reply
+
+    # Convert MP3 -> mu-law 8kHz
+    tts_mulaw = convert_mp3_to_mulaw(tts_mp3)
+    if not tts_mulaw:
+        return gpt_reply
+
+    # Base64-encode & send back to Twilio
+    payload_b64 = base64.b64encode(tts_mulaw).decode("utf-8")
+    media_msg = {
+        "event": "media",
+        "streamSid": stream_sid,
+        "media": {"payload": payload_b64},
+    }
+    await websocket.send_json(media_msg)
+    logger.info("Sent TTS audio back to Twilio.")
+
+    return gpt_reply
+
+
 @app.websocket("/media-stream/{session_id}")
 async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     """Handle media stream after customer service agent connects."""
@@ -160,7 +199,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     
     while not call_manager.is_stream_ready(session_id):
         if asyncio.get_event_loop().time() - start_time > timeout:
-            logger.ifno("Timeout waiting for session to be ready")
+            logger.info("Timeout waiting for session to be ready")
             await twilio_websocket.close()
             return
             
@@ -178,53 +217,12 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     twilio_stream_sid = None
 
     async def on_transcript(transcript: str):
-        logger.info(f"[STT Transcript] {transcript}")
-
-        # Get user info and generate prompt
-        user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO)
-        system_prompt = generate_system_prompt(user_info)
-        
-        # Add user message to history
-        call_manager.add_to_chat_history(session_id, "user", transcript)
-        
-        # Get chat history
-        chat_history = call_manager.get_chat_history(session_id)
-        
-        # Get GPT response
-        gpt_reply = get_openai_response(system_prompt, transcript, chat_history)
-        logger.info(f"[GPT Response] {gpt_reply}")
-
-        # Add assistant response to history
-        call_manager.add_to_chat_history(session_id, "assistant", gpt_reply)
-
-        # Check for 'redirect'
-        if is_redirect(gpt_reply):
-            call_url = twilio_websocket.url.hostname
-            dial_user(call_url, session_id)
-            # TODO: have it say that redirecting the call to the user
-            return
-
-        # 3) Synthesize GPT text with Deepgram TTS
-        tts_mp3 = await synthesize_speech(gpt_reply)
-        if not tts_mp3:
-            return
-
-        # 4) Convert MP3 -> mu-law 8kHz
-        tts_mulaw = convert_mp3_to_mulaw(tts_mp3)
-        if not tts_mulaw:
-            return
-
-        # 5) Base64-encode & send back to Twilio
-        if twilio_stream_sid:
-            payload_b64 = base64.b64encode(tts_mulaw).decode("utf-8")
-            media_msg = {
-                "event": "media",
-                "streamSid": twilio_stream_sid,
-                "media": {"payload": payload_b64},
-            }
-            await twilio_websocket.send_json(media_msg)
-            logger.info("Sent TTS audio back to Twilio.")
-
+        await handle_stt_transcript(
+            transcript=transcript,
+            session_id=session_id,
+            stream_sid=twilio_stream_sid,
+            websocket=twilio_websocket
+        )
 
     # Create Deepgram STT connection
     dg_connection = await create_deepgram_stt_connection(on_transcript)
