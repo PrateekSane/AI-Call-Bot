@@ -3,7 +3,7 @@ import os
 from backend.utils.utils import logger
 from typing import List, Dict
 from backend.core.constants import CallInfo
-from backend.utils.utils import generate_system_prompt
+from backend.services.prompts import generate_system_prompt
 
 
 openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
