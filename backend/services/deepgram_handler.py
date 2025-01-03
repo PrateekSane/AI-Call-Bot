@@ -76,7 +76,6 @@ async def synthesize_speech(text: str) -> bytes:
 
     try:
         # This calls the TTS endpoint and returns the audio in memory
-        logger.info(f"Synthesizing speech for: {text}")
         tts_response = await deepgram.speak.asyncrest.v("1").stream_memory(body, tts_options)
         audio_buffer = tts_response.stream_memory.getbuffer()
         audio_bytes = audio_buffer.tobytes()
@@ -98,7 +97,7 @@ def convert_mp3_to_mulaw(mp3_bytes: bytes) -> bytes:
         mp3_data = AudioSegment.from_file(io.BytesIO(mp3_bytes), format="mp3")
         # Convert to 8kHz, mono, mu-law
         mu_law_data = mp3_data.set_frame_rate(8000).set_channels(1).set_sample_width(1).export(
-            format="wav",
+            format="mulaw",
             codec="pcm_mulaw",
         )
         return mu_law_data.read()

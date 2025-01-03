@@ -155,7 +155,7 @@ async def handle_stt_transcript(
     if not websocket or not stream_sid:
         raise ValueError("No websocket or streamSid provided. Not sending TTS audio.")
 
-    gpt_reply = await invoke_gpt(transcript, session_id)
+    gpt_reply = await invoke_gpt(transcript, session_id, call_manager)
 
     # Check for 'redirect'
     if is_redirect(gpt_reply):
@@ -164,16 +164,12 @@ async def handle_stt_transcript(
 
     # Synthesize GPT text with Deepgram TTS
     tts_mp3 = await synthesize_speech(gpt_reply)
-    if not tts_mp3:
-        return gpt_reply
 
     # Convert MP3 -> mu-law 8kHz
     tts_mulaw = convert_mp3_to_mulaw(tts_mp3)
-    if not tts_mulaw:
-        return gpt_reply
 
     # Base64-encode & send back to Twilio
-    payload_b64 = base64.b64encode(tts_mulaw).decode("utf-8")
+    payload_b64 = base64.b64encode(tts_mulaw).decode("ascii")
     media_msg = {
         "event": "media",
         "streamSid": stream_sid,
@@ -181,7 +177,6 @@ async def handle_stt_transcript(
     }
     await websocket.send_json(media_msg)
     logger.info("Sent TTS audio back to Twilio.")
-
     return gpt_reply
 
 
