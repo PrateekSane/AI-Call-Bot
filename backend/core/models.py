@@ -13,10 +13,10 @@ class UserInformation(BaseModel):
 
 class CallSids(BaseModel):
     """Track all call SIDs for a session"""
-    outbound_bot: Optional[str] = None
-    inbound_bot: Optional[str] = None
-    customer_service: Optional[str] = None
-    user: Optional[str] = None
+    outbound_bot_sid: Optional[str] = None
+    inbound_bot_sid: Optional[str] = None
+    customer_service_sid: Optional[str] = None
+    user_sid: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
