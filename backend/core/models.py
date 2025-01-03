@@ -2,12 +2,6 @@ from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
 
 
-class ChatMessage(BaseModel):
-    """Individual chat message for history"""
-    role: str
-    content: str
-
-
 class UserInformation(BaseModel):
     """User information for the system prompt"""
     user_name: str
@@ -23,6 +17,12 @@ class CallSids(BaseModel):
     inbound_bot: Optional[str] = None
     customer_service: Optional[str] = None
     user: Optional[str] = None
+
+
+class ChatMessage(BaseModel):
+    """Chat message for a session"""
+    role: str
+    content: str
 
 
 class SessionData(BaseModel):
@@ -42,12 +42,8 @@ class SessionData(BaseModel):
     
     # User information
     user_info: Optional[UserInformation] = None
-    
-    # Ready for stream
-    ready_for_stream: bool = False
-    
-    # Chat history
-    chat_history: List[ChatMessage] = Field(default_factory=list)
+
+    chat_history: Optional[List[ChatMessage]] = None
 
 
 class InitiateCallRequest(BaseModel):
@@ -56,3 +52,7 @@ class InitiateCallRequest(BaseModel):
     cs_number: str = Field(..., pattern=r'^\+\d{11}$')
     user_number: str = Field(..., pattern=r'^\+\d{11}$')
     user_info: UserInformation 
+
+
+class OpenAIResponseFormat(BaseModel):
+    response_method: str
