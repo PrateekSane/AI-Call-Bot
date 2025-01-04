@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import Connect, VoiceResponse
 
-from backend.core.constants import CallInfo, TwilioCallStatus
+from backend.core.constants import CallInfo, ResponseMethod, TwilioCallStatus
 from backend.core.call_manager import call_manager
 from backend.core.models import InitiateCallRequest
 from backend.services.deepgram_handler import (
@@ -146,23 +146,10 @@ async def incoming_call(request: Request):
     return HTMLResponse(content=str(response), media_type="application/xml")
 
 
-async def handle_stt_transcript(
-    transcript: str,
-    session_id: str,
-    stream_sid: Optional[str],
-    websocket: Optional[WebSocket]
-):
+async def handle_voice_response(gpt_reply, stream_sid, websocket):
     if not websocket or not stream_sid:
-        raise ValueError("No websocket or streamSid provided. Not sending TTS audio.")
-
-    gpt_reply = await invoke_gpt(transcript, session_id, call_manager)
-
-    # Check for 'redirect'
-    if is_redirect(gpt_reply):
-        call_url = websocket.url.hostname
-        dial_user(call_url, session_id)
-
-    # Synthesize GPT text with Deepgram TTS
+        raise ValueError("No websocket or streamSid provided. Unable to send TTS audio.")
+        
     tts_mp3 = await synthesize_speech(gpt_reply)
 
     # Convert MP3 -> mu-law 8kHz
@@ -178,6 +165,35 @@ async def handle_stt_transcript(
     await websocket.send_json(media_msg)
     logger.info("Sent TTS audio back to Twilio.")
     return gpt_reply
+
+
+def handle_dial_tree(gpt_reply):
+    """Handle the dial tree response"""
+    logger.info(f"Dial tree response: {gpt_reply}")
+    return
+
+
+async def handle_stt_transcript(
+    transcript: str,
+    session_id: str,
+    stream_sid: Optional[str],
+    websocket: Optional[WebSocket]
+):
+    gpt_reply = await invoke_gpt(transcript, session_id, call_manager)
+    match gpt_reply["response_method"]:
+        case ResponseMethod.NOOP.value:
+            logger.info("No operation needed, skipping TTS")
+            return ""
+        case ResponseMethod.CALL_BACK.value:
+            dial_user(websocket.url.hostname, session_id)
+            return ""
+        case ResponseMethod.DIAL_TREE.value:
+            return await handle_dial_tree(gpt_reply)
+        case ResponseMethod.VOICE.value:
+            return await handle_voice_response(gpt_reply, stream_sid, websocket)
+        case _:
+            logger.error(f"Unknown response method: {gpt_reply['response_method']}")
+            return ""
 
 
 @app.websocket("/media-stream/{session_id}")
