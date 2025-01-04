@@ -201,7 +201,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
         await asyncio.sleep(1)  # Check every second
         
     logger.info("Session ready, proceeding with media stream handling")
-    
+    asyncio.sleep(.5)
     session_info = call_manager.get_session_by_id(session_id)
     if not session_info:
         logger.error(f"Session not found for CallSid: {session_id}")
@@ -220,8 +220,8 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
         )
 
     # Create Deepgram STT connection
-    dg_connection = await create_deepgram_stt_connection(on_transcript)
-    if dg_connection is None:
+    stt_dg_connection = await create_deepgram_stt_connection(on_transcript)
+    if stt_dg_connection is None:
         logger.error("Failed to open Deepgram STT. Closing Twilio WS.")
         await twilio_websocket.close()
         return
@@ -241,7 +241,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
                 # STT inbound from user
                 audio_b64 = data["media"]["payload"]
                 audio_bytes = base64.b64decode(audio_b64)
-                dg_connection.send(audio_bytes)
+                stt_dg_connection.send(audio_bytes)
 
             elif event_type == "stop":
                 logger.info("Received Twilio 'stop' event. Ending stream.")
@@ -252,7 +252,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"Error reading Twilio WS: {e}")
     finally:
-        await close_deepgram_stt_connection(dg_connection)
+        await close_deepgram_stt_connection(stt_dg_connection)
         await twilio_websocket.close()
         logger.info("Closed Twilio WS and Deepgram STT connection.")
 

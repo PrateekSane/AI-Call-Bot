@@ -4,7 +4,7 @@ from backend.utils.utils import logger
 from typing import List, Dict
 from backend.core.constants import CallInfo
 from backend.services.prompts import generate_system_prompt
-
+from backend.core.models import OpenAIResponseFormat
 
 openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
@@ -20,14 +20,27 @@ def get_openai_response(system_prompt: str, user_message: str, chat_history: Lis
             messages.append({"role": "user", "content": user_message})
 
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0.7,
-            max_tokens=150
+            max_tokens=150,
+            response_format={
+                'type': 'json_schema',
+                'json_schema': 
+                    {
+                        "name":"TwilioResponse", 
+                        "schema": OpenAIResponseFormat.model_json_schema()
+                    }
+            } 
         )
 
-        assistant_reply = response.choices[0].message.content.strip()
-        return assistant_reply
+        assistant_reply = response.choices[0].message
+        if assistant_reply.refusal:
+            # handle refusal
+            print(assistant_reply.refusal)
+            return "" 
+        return assistant_reply.content.strip()
+
     except Exception as e:
         logger.error(f"OpenAI error: {e}")
         return "I encountered an error. Please hold."

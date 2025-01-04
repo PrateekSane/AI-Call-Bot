@@ -1,5 +1,6 @@
 from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
+from backend.core.constants import ResponseMethod
 
 
 class UserInformation(BaseModel):
@@ -43,7 +44,9 @@ class SessionData(BaseModel):
     # User information
     user_info: Optional[UserInformation] = None
 
-    chat_history: Optional[List[ChatMessage]] = None
+    chat_history: Optional[List[ChatMessage]] = [] 
+
+    ready_for_stream: bool = False
 
 
 class InitiateCallRequest(BaseModel):
@@ -55,4 +58,6 @@ class InitiateCallRequest(BaseModel):
 
 
 class OpenAIResponseFormat(BaseModel):
-    response_method: str
+    """Response format for OpenAI API to handle Twilio response"""
+    response_method: ResponseMethod
+    response_content: str 

@@ -67,7 +67,7 @@ async def synthesize_speech(text: str) -> bytes:
     Returns raw audio bytes in the chosen format (e.g., MP3).
     Then we must convert to mu-law if needed for Twilio live streaming.
     """
-    deepgram = get_deepgram_client()
+    tts_deepgram = get_deepgram_client()
 
     # We can get the audio in memory using .get(...) instead of .save(...).
     # According to docs, this returns a Response object with .content or .raw
@@ -76,13 +76,15 @@ async def synthesize_speech(text: str) -> bytes:
 
     try:
         # This calls the TTS endpoint and returns the audio in memory
-        tts_response = await deepgram.speak.asyncrest.v("1").stream_memory(body, tts_options)
+        tts_response = await tts_deepgram.speak.asyncrest.v("1").stream_memory(body, tts_options)
         audio_buffer = tts_response.stream_memory.getbuffer()
         audio_bytes = audio_buffer.tobytes()
         return audio_bytes
     except Exception as e:
         logger.error(f"Error synthesizing speech with Deepgram: {e}")
         return b""
+    finally:
+        await tts_deepgram.close()
 
 
 def convert_mp3_to_mulaw(mp3_bytes: bytes) -> bytes:
