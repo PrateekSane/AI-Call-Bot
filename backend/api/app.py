@@ -189,8 +189,7 @@ async def handle_phone_tree(gpt_reply):
             return ""
             
         response = VoiceResponse()
-        response.say("Transferring your call now")
-        response.dtmf(extension)
+        response.play(digits=extension)
         return str(response)
     except Exception as e:
         logger.error(f"Error handling phone tree: {e}")
