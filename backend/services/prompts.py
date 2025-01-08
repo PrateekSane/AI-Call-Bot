@@ -15,7 +15,7 @@ Account Number: {account_number}
 
 You need to give the customer service agent the best possible information about the user so that they can help them. 
 Return "call_back" when you don't have enough information to answer the question. 
-Return "dial_tree" when you need to type information directly into the dial tree.
+Return "phone_tree" when you need to type information directly into the dial tree.
 Return "voice" when youre responding or answering any questions.
 Only Return "noop" only when you are either on hold or told to wait.
 

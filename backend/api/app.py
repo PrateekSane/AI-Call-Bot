@@ -25,18 +25,6 @@ from backend.utils.utils import logger, twilio_client
 
 load_dotenv('../env/.env')
 
-"""
-# TODO: move into call_manager
-active_calls = twilio_client.calls.list(
-    from_=TWILIO_PHONE_NUMBER,
-    status="in-progress"
-)
-
-# End each active call by updating its status to 'completed'
-for call in active_calls:
-    twilio_client.calls(call.sid).update(status="completed")
-    print(f"Ended call with SID: {call.sid}")
-"""
 
 
 PORT = int(os.getenv('PORT', 5050))
@@ -51,6 +39,15 @@ async def index_page():
 @app.api_route("/initiate-call", methods=["POST"])
 async def initiate_call(request: InitiateCallRequest, req: Request):
     try:
+        # End any active calls
+        active_calls = twilio_client.calls.list(
+            from_=request.cs_number,
+            status="in-progress"
+        )
+        for call in active_calls:
+            twilio_client.calls(call.sid).update(status="completed")
+            print(f"Ended call with SID: {call.sid}")
+
         host = req.url.hostname
         session_id = call_manager.create_new_session()
         
@@ -135,7 +132,6 @@ async def incoming_call(request: Request):
     response = VoiceResponse()
     response.pause(length=1)
     user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO)
-    print("USER INFO", user_info)
     user_name = user_info.get('user_name') if user_info else "unknown"
     response.say(f"Hi, I'm a helpful agent working for {user_name}")
 
@@ -146,31 +142,59 @@ async def incoming_call(request: Request):
     return HTMLResponse(content=str(response), media_type="application/xml")
 
 
+async def send_websocket_message(websocket: WebSocket, stream_sid: str, event_type: str, payload: any):
+    """Send a message through the websocket with the specified event type and payload"""
+    if not websocket or not stream_sid:
+        raise ValueError("No websocket or streamSid provided. Unable to send message.")
+    
+    message = {
+        "event": event_type,
+        "streamSid": stream_sid,
+    }
+    
+    if event_type == "media":
+        message["media"] = {"payload": payload}
+    elif event_type == "mark":
+        message["mark"] = {
+            "name": "twiml",
+            "payload": payload
+        }
+        
+    await websocket.send_json(message)
+    logger.info(f"Sent {event_type} message through websocket")
+
+
 async def handle_voice_response(gpt_reply, stream_sid, websocket):
+    """Handle voice response by converting text to speech and sending audio"""
     if not websocket or not stream_sid:
         raise ValueError("No websocket or streamSid provided. Unable to send TTS audio.")
         
-    tts_mp3 = await synthesize_speech(gpt_reply)
-
-    # Convert MP3 -> mu-law 8kHz
+    response_content = gpt_reply.get('response_content')
+    if not response_content:
+        logger.error("No response content provided in voice response")
+        return ""
+    
+    tts_mp3 = await synthesize_speech(response_content)
     tts_mulaw = convert_mp3_to_mulaw(tts_mp3)
-
-    # Base64-encode & send back to Twilio
     payload_b64 = base64.b64encode(tts_mulaw).decode("ascii")
-    media_msg = {
-        "event": "media",
-        "streamSid": stream_sid,
-        "media": {"payload": payload_b64},
-    }
-    await websocket.send_json(media_msg)
-    logger.info("Sent TTS audio back to Twilio.")
-    return gpt_reply
+    return payload_b64
 
 
-def handle_dial_tree(gpt_reply):
-    """Handle the dial tree response"""
-    logger.info(f"Dial tree response: {gpt_reply}")
-    return
+async def handle_phone_tree(gpt_reply):
+    """Handle the phone tree response by generating TwiML to dial the extension"""
+    try:
+        extension = gpt_reply.get('response_content')
+        if not extension:
+            logger.error("No extension provided in phone tree response")
+            return ""
+            
+        response = VoiceResponse()
+        response.say("Transferring your call now")
+        response.dtmf(extension)
+        return str(response)
+    except Exception as e:
+        logger.error(f"Error handling phone tree: {e}")
+        return ""
 
 
 async def handle_stt_transcript(
@@ -183,17 +207,16 @@ async def handle_stt_transcript(
     match gpt_reply["response_method"]:
         case ResponseMethod.NOOP.value:
             logger.info("No operation needed, skipping TTS")
-            return ""
         case ResponseMethod.CALL_BACK.value:
             dial_user(websocket.url.hostname, session_id)
-            return ""
-        case ResponseMethod.DIAL_TREE.value:
-            return await handle_dial_tree(gpt_reply)
+        case ResponseMethod.PHONE_TREE.value:
+            twiml_response = await handle_phone_tree(gpt_reply)
+            await send_websocket_message(websocket, stream_sid, "mark", twiml_response)
         case ResponseMethod.VOICE.value:
-            return await handle_voice_response(gpt_reply, stream_sid, websocket)
+            response = await handle_voice_response(gpt_reply, stream_sid, websocket)
+            await send_websocket_message(websocket, stream_sid, "media", response)
         case _:
             logger.error(f"Unknown response method: {gpt_reply['response_method']}")
-            return ""
 
 
 @app.websocket("/media-stream/{session_id}")
@@ -216,8 +239,10 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
             
         await asyncio.sleep(1)  # Check every second
         
+    # pause before proceeding
+    await asyncio.sleep(1)
+        
     logger.info("Session ready, proceeding with media stream handling")
-    asyncio.sleep(.5)
     session_info = call_manager.get_session_by_id(session_id)
     if not session_info:
         logger.error(f"Session not found for CallSid: {session_id}")

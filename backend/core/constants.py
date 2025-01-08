@@ -34,4 +34,4 @@ class ResponseMethod(Enum):
     NOOP = 'noop'
     VOICE = 'voice'
     CALL_BACK = 'call_back'
-    DIAL_TREE = 'dial_tree'
+    PHONE_TREE = 'phone_tree'
