@@ -1,6 +1,7 @@
 from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
-from backend.core.constants import ResponseMethod
+from backend.core.constants import ResponseMethod, BotCallType, CallType
+from dataclasses import dataclass, field
 
 
 class UserInformation(BaseModel):
@@ -12,12 +13,17 @@ class UserInformation(BaseModel):
     additional_info: Dict[str, str] = Field(default_factory=dict)
 
 
-class CallSids(BaseModel):
-    """Track all call SIDs for a session"""
-    outbound_bot_sid: Optional[str] = None
-    inbound_bot_sid: Optional[str] = None
-    customer_service_sid: Optional[str] = None
-    user_sid: Optional[str] = None
+@dataclass
+class BotCall:
+    call_sid: str
+    call_type: CallType  # This will only contain bot call types
+
+@dataclass
+class CallSids:
+    outbound_bots: Dict[str, BotCall] = field(default_factory=dict)  # call_sid -> BotCall
+    inbound_bots: Dict[str, BotCall] = field(default_factory=dict)   # call_sid -> BotCall
+    customer_service: Optional[str] = None
+    user: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

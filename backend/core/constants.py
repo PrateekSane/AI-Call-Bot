@@ -35,3 +35,22 @@ class ResponseMethod(Enum):
     VOICE = 'voice'
     CALL_BACK = 'call_back'
     PHONE_TREE = 'phone_tree'
+
+class CallType(Enum):
+    # Bot call types
+    CONFERENCE = 'conference'
+    STREAM = 'stream'
+    RECORDING = 'recording'
+    PHONE_TREE = 'phone_tree'
+    # Other call types
+    USER = 'user'
+    CUSTOMER_SERVICE = 'customer_service'
+
+    @property
+    def is_bot_call(self) -> bool:
+        return self in {
+            CallType.CONFERENCE,
+            CallType.STREAM,
+            CallType.RECORDING,
+            CallType.PHONE_TREE
+        }

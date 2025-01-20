@@ -2,8 +2,8 @@ import threading
 import uuid
 from typing import Dict, Optional, Any, Union, List
 
-from backend.core.constants import CallInfo, UserInformationKeys
-from backend.core.models import SessionData, CallSids, ChatMessage
+from backend.core.constants import CallInfo, UserInformationKeys, CallType
+from backend.core.models import SessionData, CallSids, ChatMessage, BotCall
 from backend.utils.utils import logger
 
 
@@ -29,13 +29,35 @@ class CallManager:
             self._sessions[session_id] = session_data
             return session_id
 
-    def link_call_to_session(self, call_sid: str, session_id: str):
-        """Associate a callSid with an existing session."""
+    def link_call_to_session(self, call_sid: str, session_id: str, call_type: CallType, is_outbound: Optional[bool] = None):
+        """
+        Associate a callSid with an existing session and set appropriate session values.
+        
+        Args:
+            call_sid: The Twilio call SID
+            session_id: The session to link to
+            call_type: The type of call (from CallType enum)
+            is_outbound: For bot calls, specify if outbound. Must be set if call_type is a bot call.
+        """
         with self._lock:
             if session_id not in self._sessions:
                 logger.error(f"Session {session_id} not found")
                 return
+            
+            # Link call to session
             self._call_to_session[call_sid] = session_id
+            
+            # Handle based on call type
+            if call_type.is_bot_call:
+                if is_outbound is None:
+                    raise ValueError(f"is_outbound must be specified for bot calls")
+                key = CallInfo.OUTBOUND_BOT_SID if is_outbound else CallInfo.INBOUND_BOT_SID
+                self.set_session_value(session_id, key, (call_sid, call_type))
+            else:
+                # Handle user or CS calls
+                key = (CallInfo.USER_SID if call_type == CallType.USER 
+                      else CallInfo.CUSTOMER_SERVICE_SID)
+                self.set_session_value(session_id, key, call_sid)
 
     def set_session_value(self, session_id: str, key: Union[str, CallInfo], value: Any):
         """Set a particular field in a session."""
@@ -61,11 +83,9 @@ class CallManager:
                 session.twilio_stream_sid = value
             elif key == CallInfo.USER_INFO.value:
                 session.user_info = value
-            # Handle call SIDs
-            elif key == CallInfo.OUTBOUND_BOT_SID.value:
-                session.call_sids.outbound_bot = value
-            elif key == CallInfo.INBOUND_BOT_SID.value:
-                session.call_sids.inbound_bot = value
+            elif key in {CallInfo.OUTBOUND_BOT_SID.value, CallInfo.INBOUND_BOT_SID.value}:
+                self._handle_bot_call_sid(session, key, value)
+            
             elif key == CallInfo.CUSTOMER_SERVICE_SID.value:
                 session.call_sids.customer_service = value
             elif key == CallInfo.USER_SID.value:
@@ -96,9 +116,9 @@ class CallManager:
                 return session.user_info
             # Handle call SIDs
             elif key == CallInfo.OUTBOUND_BOT_SID.value:
-                return session.call_sids.outbound_bot
+                return session.call_sids.outbound_bots
             elif key == CallInfo.INBOUND_BOT_SID.value:
-                return session.call_sids.inbound_bot
+                return session.call_sids.inbound_bots
             elif key == CallInfo.CUSTOMER_SERVICE_SID.value:
                 return session.call_sids.customer_service
             elif key == CallInfo.USER_SID.value:
@@ -187,6 +207,38 @@ class CallManager:
             return key.value
         return key
 
+    def get_bot_calls(self, session_id: str, is_outbound: bool = True) -> Dict[str, BotCall]:
+        """Get all bot calls of a specific direction (outbound/inbound)."""
+        key = CallInfo.OUTBOUND_BOT_SID if is_outbound else CallInfo.INBOUND_BOT_SID
+        return self.get_session_value(session_id, key) or {}
+
+    def get_bot_call_by_type(self, session_id: str, call_type: CallType, is_outbound: bool = True) -> Optional[BotCall]:
+        """Get a bot call by its type."""
+        if not call_type.is_bot_call:
+            raise ValueError(f"Call type {call_type} is not a bot call type")
+        
+        bot_calls = self.get_bot_calls(session_id, is_outbound)
+        for bot_call in bot_calls.values():
+            if bot_call.call_type == call_type:
+                return bot_call
+        return None
+
+    def _handle_bot_call_sid(self, session: SessionData, key: str, value: Any):
+        """Encapsulated method to handle bot call SIDs."""
+        if isinstance(value, tuple) and len(value) == 2:
+            call_sid, bot_type = value
+            if key == CallInfo.OUTBOUND_BOT_SID.value:
+                session.call_sids.outbound_bots[call_sid] = BotCall(
+                    call_sid=call_sid,
+                    call_type=bot_type
+                )
+            elif key == CallInfo.INBOUND_BOT_SID.value:
+                session.call_sids.inbound_bots[call_sid] = BotCall(
+                    call_sid=call_sid,
+                    call_type=bot_type
+                )
+        else:
+            raise ValueError(f"Invalid value for {key}: {value}")
 
 # Singleton
 call_manager = CallManager()

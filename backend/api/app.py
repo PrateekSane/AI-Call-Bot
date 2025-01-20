@@ -22,10 +22,9 @@ from backend.services.deepgram_handler import (
 from backend.services.openai_utils import invoke_gpt
 from backend.services.twilio_utils import create_call, create_conference, is_redirect, end_call
 from backend.utils.utils import logger, twilio_client
+from backend.core.constants import CallType
 
 load_dotenv('../env/.env')
-
-
 
 PORT = int(os.getenv('PORT', 5050))
 app = FastAPI()
@@ -61,15 +60,14 @@ async def initiate_call(request: InitiateCallRequest, req: Request):
         call_events_url = f"https://{host}/call_events"
         
         # Create bot call
-        bot_call = create_call(
+        outgoing_conf_bot_call = create_call(
             twilio_client, 
             to=request.bot_number,
             from_=request.bot_number,
             url=join_conference_url,
             status_callback=call_events_url
         )
-        call_manager.link_call_to_session(bot_call.sid, session_id)
-        call_manager.set_session_value(session_id, CallInfo.OUTBOUND_BOT_SID, bot_call.sid)
+        call_manager.link_call_to_session(outgoing_conf_bot_call.sid, session_id, CallType.CONFERENCE, is_outbound=True)
 
         # Create customer service call
         cs_call = create_call(
@@ -79,8 +77,7 @@ async def initiate_call(request: InitiateCallRequest, req: Request):
             url=join_conference_url,
             status_callback=call_events_url
         )
-        call_manager.link_call_to_session(cs_call.sid, session_id)
-        call_manager.set_session_value(session_id, CallInfo.CUSTOMER_SERVICE_SID, cs_call.sid)
+        call_manager.link_call_to_session(cs_call.sid, session_id, CallType.CUSTOMER_SERVICE)
         
         return {"message": "Calls initiated", "session_id": session_id, "cs_call_sid": cs_call.sid}
         
@@ -126,8 +123,7 @@ async def incoming_call(request: Request):
     
     session_id = session_data.session_id
     
-    call_manager.link_call_to_session(incoming_call_sid, session_id)
-    call_manager.set_session_value(session_id, CallInfo.INBOUND_BOT_SID, incoming_call_sid)
+    call_manager.link_call_to_session(incoming_call_sid, session_id, CallType.STREAM, is_outbound=False)
 
     response = VoiceResponse()
     response.pause(length=1)
