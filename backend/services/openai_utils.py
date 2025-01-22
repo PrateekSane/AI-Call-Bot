@@ -5,6 +5,7 @@ from typing import List, Dict
 from backend.core.constants import CallInfo
 from backend.services.prompts import generate_system_prompt
 from backend.core.models import OpenAIResponseFormat
+import json
 
 openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
@@ -61,7 +62,12 @@ async def invoke_gpt(transcript, session_id, call_manager):
     
     # Get GPT response
     gpt_reply = get_openai_response(system_prompt, transcript, chat_history)
-    logger.info(f"[GPT Response] {gpt_reply}")
+    try:
+        gpt_reply = json.loads(gpt_reply)
+        logger.info(f"[GPT Response] {gpt_reply}")
+    except Exception as e:
+        logger.error(f"Error parsing GPT response: {e}")
+        gpt_reply = {}
 
     # Add assistant response to history
     call_manager.add_to_chat_history(session_id, "assistant", gpt_reply)

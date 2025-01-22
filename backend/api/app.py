@@ -166,6 +166,7 @@ async def handle_voice_response(gpt_reply, stream_sid, websocket):
         raise ValueError("No websocket or streamSid provided. Unable to send TTS audio.")
         
     response_content = gpt_reply.get('response_content')
+    logger.info(f"Sending TTS audio with response content: {response_content}")
     if not response_content:
         logger.error("No response content provided in voice response")
         return ""
@@ -199,19 +200,25 @@ async def handle_stt_transcript(
     websocket: Optional[WebSocket]
 ):
     gpt_reply = await invoke_gpt(transcript, session_id, call_manager)
-    match gpt_reply["response_method"]:
-        case ResponseMethod.NOOP.value:
-            logger.info("No operation needed, skipping TTS")
-        case ResponseMethod.CALL_BACK.value:
-            dial_user(websocket.url.hostname, session_id)
-        case ResponseMethod.PHONE_TREE.value:
-            twiml_response = await handle_phone_tree(gpt_reply)
-            await send_websocket_message(websocket, stream_sid, "mark", twiml_response)
-        case ResponseMethod.VOICE.value:
-            response = await handle_voice_response(gpt_reply, stream_sid, websocket)
-            await send_websocket_message(websocket, stream_sid, "media", response)
-        case _:
-            logger.error(f"Unknown response method: {gpt_reply['response_method']}")
+    try:
+        logger.info("APPLESS")
+        logger.info(f"Sending voice response: {gpt_reply['response_method']}")
+        logger.info("ORANGES")
+        match gpt_reply["response_method"]:
+            case ResponseMethod.NOOP.value:
+                logger.info("No operation needed, skipping TTS")
+            case ResponseMethod.CALL_BACK.value:
+                dial_user(websocket.url.hostname, session_id)
+            case ResponseMethod.PHONE_TREE.value:
+                twiml_response = await handle_phone_tree(gpt_reply)
+                await send_websocket_message(websocket, stream_sid, "mark", twiml_response)
+            case ResponseMethod.VOICE.value:
+                response = await handle_voice_response(gpt_reply, stream_sid, websocket)
+                await send_websocket_message(websocket, stream_sid, "media", response)
+            case _:
+                logger.error(f"Unknown response method: {gpt_reply['response_method']}")
+    except Exception as e:
+        logger.error(f"Error handling voice response: {e}")
 
 
 @app.websocket("/media-stream/{session_id}")

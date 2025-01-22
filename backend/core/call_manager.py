@@ -187,7 +187,7 @@ class CallManager:
                 logger.error(f"Session {session_id} not found")
                 return
             self._sessions[session_id].chat_history.append(
-                ChatMessage(role=role, content=content)
+                ChatMessage(role=role, content=str(content))
             )
 
     def get_chat_history(self, session_id: str) -> List[Dict[str, str]]:

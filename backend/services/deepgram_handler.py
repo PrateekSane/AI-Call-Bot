@@ -83,8 +83,6 @@ async def synthesize_speech(text: str) -> bytes:
     except Exception as e:
         logger.error(f"Error synthesizing speech with Deepgram: {e}")
         return b""
-    finally:
-        await tts_deepgram.close()
 
 
 def convert_mp3_to_mulaw(mp3_bytes: bytes) -> bytes:
