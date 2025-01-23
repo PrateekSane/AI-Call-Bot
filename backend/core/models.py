@@ -25,34 +25,16 @@ class CallSids:
     customer_service: Optional[str] = None
     user: Optional[str] = None
 
+@dataclass
+class MetaCallSids:
+    twilio_stream: Optional[str] = None
+    conference: Optional[str] = None
+
 
 class ChatMessage(BaseModel):
     """Chat message for a session"""
     role: str
     content: str
-
-
-class SessionData(BaseModel):
-    """All data associated with a call session"""
-    session_id: str
-    conference_name: str
-    conference_sid: Optional[str] = None
-    twilio_stream_sid: Optional[str] = None
-    
-    # Phone numbers
-    bot_number: Optional[str] = None
-    cs_number: Optional[str] = None
-    user_number: Optional[str] = None
-    
-    # Call SIDs
-    call_sids: CallSids = Field(default_factory=CallSids)
-    
-    # User information
-    user_info: Optional[UserInformation] = None
-
-    chat_history: Optional[List[ChatMessage]] = [] 
-
-    ready_for_stream: bool = False
 
 
 class InitiateCallRequest(BaseModel):

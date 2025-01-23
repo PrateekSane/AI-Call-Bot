@@ -1,19 +1,6 @@
 from enum import Enum
 
 
-class CallInfo(Enum):
-    SESSION = 'session_id'
-    OUTBOUND_BOT_SID = 'outbound_bot_call_sid'
-    INBOUND_BOT_SID = 'inbound_bot_call_sid'
-    USER_SID = 'user_call_sid'
-    CUSTOMER_SERVICE_SID = 'customer_service_call_sid'
-    CONFERENCE_SID = 'conference_sid'
-    CONFERENCE_NAME = 'conference_name'
-    TWILIO_STREAM_SID = 'twilio_stream_sid'
-    BOT_NUMBER = 'bot_number'
-    CS_NUMBER = 'cs_number'
-    USER_NUMBER = 'user_number'
-    USER_INFO = 'user_info'
 
 
 class UserInformationKeys(Enum):
@@ -35,6 +22,22 @@ class ResponseMethod(Enum):
     VOICE = 'voice'
     CALL_BACK = 'call_back'
     PHONE_TREE = 'phone_tree'
+
+
+class CallInfo(Enum):
+    SESSION = 'session_id'
+    OUTBOUND_BOT_SID = 'outbound_bot_call_sid'
+    INBOUND_BOT_SID = 'inbound_bot_call_sid'
+    USER_SID = 'user_call_sid'
+    CUSTOMER_SERVICE_SID = 'customer_service_call_sid'
+    CONFERENCE_SID = 'conference_sid'
+    CONFERENCE_NAME = 'conference_name'
+    TWILIO_STREAM_SID = 'twilio_stream_sid'
+    BOT_NUMBER = 'bot_number'
+    CS_NUMBER = 'cs_number'
+    USER_NUMBER = 'user_number'
+    USER_INFO = 'user_info'
+
 
 class CallType(Enum):
     # Bot call types
