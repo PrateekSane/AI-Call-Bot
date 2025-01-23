@@ -6,6 +6,8 @@ import dotenv
 import requests
 import time
 import json
+from loguru import logger
+
 dotenv.load_dotenv('env/.env')
 
 
@@ -18,27 +20,29 @@ def setup_twilio():
 
 def setup_logging():
     log_file = 'app.log'
-    logger = logging.getLogger(__name__)
 
-    if not logger.hasHandlers():
-        logger.setLevel(logging.INFO)
+    # Remove all existing handlers
+    logger.remove()
 
-        # Create file handler
-        file_handler = logging.FileHandler(log_file, mode='a', delay=False)
-        file_handler.setLevel(logging.INFO)
+    # Add file handler
+    logger.add(log_file, level="INFO", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
 
-        # Create console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+    # Add console handler
+    logger.add("stdout", level="INFO", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}", colorize=True)
 
-        # Create formatter
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        file_handler.setFormatter(formatter)
-        console_handler.setFormatter(formatter)
+    # You can configure loguru's output format globally:
+    logger.add(
+        "stdout", 
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}", 
+        level="INFO",
+        colorize=True
+    )
 
-        # Add both handlers to the logger
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
+    if __name__ == "__main__":
+        logger.debug("Debug message")
+        logger.info("Info message")
+        logger.error("Error message")
+
 
     return logger
 
