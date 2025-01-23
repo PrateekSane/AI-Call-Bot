@@ -18,8 +18,12 @@ def create_call(twilio_client, to, from_, url, status_callback,
 
 def create_conference(conference_name, call_events_url, status_callback_event=None, status_callback_method='POST', start_conference_on_enter=True, end_conference_on_exit=False):
     if status_callback_event is None:
-        status_callback_event = ['join', 'leave']
-    # Add the caller to the conference
+        # By default, pass a space-delimited string
+        status_callback_event = "join leave"
+    elif isinstance(status_callback_event, list):
+        # Convert lists to a space-delimited string
+        status_callback_event = " ".join(status_callback_event)
+
     dial = Dial()
     dial.conference(
         conference_name,
