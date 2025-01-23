@@ -1,6 +1,6 @@
 from typing import Dict, Optional, List
 from pydantic import BaseModel, Field
-from backend.core.constants import ResponseMethod, BotCallType, CallType
+from backend.core.constants import ResponseMethod, CallType
 from dataclasses import dataclass, field
 
 
