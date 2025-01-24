@@ -1,10 +1,10 @@
 import threading
 import uuid
-from typing import Dict, Optional, Any, Union, List
+from typing import Dict, Optional
 
-from backend.core.constants import CallInfo, CallType
+from backend.core.constants import CallType
 from backend.models.session_data import SessionData
-from backend.core.models import CallSids, ChatMessage, BotCall
+from backend.core.models import CallSids
 from backend.utils.utils import logger
 
 
@@ -24,7 +24,6 @@ class CallManager:
             session_data = SessionData(
                 session_id=session_id,
                 conference_name=conference_name,
-                call_sids=CallSids()
             )
             
             self._sessions[session_id] = session_data
@@ -49,6 +48,7 @@ class CallManager:
             is_outbound: For bot calls, specify if outbound. Must be set if call_type is a bot call.
         """
         with self._lock:
+            logger.info(f"Linking call {call_sid} to session {session_id}")
             if session_id not in self._sessions:
                 logger.error(f"Session {session_id} not found")
                 return
@@ -56,6 +56,7 @@ class CallManager:
             # Link call to session
             self._call_to_session[call_sid] = session_id
             self._sessions[session_id].set_call_sid(call_type, call_sid, is_outbound)
+            # Need to have multiple sessions for the same number because of the bot
             if call_number in self._number_to_session:
                 self._number_to_session[call_number].append((session_id, call_sid))
             else:
@@ -81,30 +82,41 @@ class CallManager:
     def get_session_by_number(self, bot_number: str) -> Optional[SessionData]:
         """Get session using the bot number."""
         with self._lock:
-            session_id = self._number_to_session.get(bot_number)
+            session_id_pairs = self._number_to_session.get(bot_number)
             # TODO: have check for multiple sessions in the caller
-            if not session_id:
+            if not session_id_pairs:
                 logger.error(f"Bot number {bot_number} not found in any session")
                 return None
+            
+            unique_session_ids = {session_id for session_id, _ in session_id_pairs}
+            if len(unique_session_ids) > 1:
+                logger.error(f"Multiple sessions found for bot number {bot_number}")
+                return None
 
+            assert len(unique_session_ids) == 1
+            session_id = next(iter(unique_session_ids))
             return self._sessions.get(session_id)
 
     def delete_session(self, session_id: str):
         """Clean up session data once it's no longer needed."""
         with self._lock:
             if session_id in self._sessions:
-                session = self._sessions[session_id]
-                
-                # Remove bot number mapping
-                if session.bot_number:
-                    self._number_to_session = {k: v for k, v in self._number_to_session.items() if not any(sid == session_id for sid, _ in v)}
-                
-                # Remove call mappings
+                # 1. Remove references to this session in _number_to_session
+                for number, tuples in list(self._number_to_session.items()):
+                    new_tuples = [(sid, c_sid) for (sid, c_sid) in tuples if sid != session_id]
+                    if not new_tuples:
+                        # If no pairs remain, remove the number entirely
+                        del self._number_to_session[number]
+                    else:
+                        self._number_to_session[number] = new_tuples
+
+                # 2. Remove call_sid -> session_id mappings
                 for call_sid, sid in list(self._call_to_session.items()):
                     if sid == session_id:
                         del self._call_to_session[call_sid]
-                
-                del self._sessions[session_id]
 
+                # 3. Remove the session object
+                del self._sessions[session_id]
+    
 # Singleton
 call_manager = CallManager()

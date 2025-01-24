@@ -55,3 +55,8 @@ class CallType(Enum):
             CallType.RECORDING,
             CallType.PHONE_TREE
         }
+
+
+class CallDirection(Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"

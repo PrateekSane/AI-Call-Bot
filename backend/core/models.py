@@ -1,6 +1,6 @@
-from typing import Dict, Optional, List
+from typing import Dict, Optional, Tuple
 from pydantic import BaseModel, Field
-from backend.core.constants import ResponseMethod, CallType
+from backend.core.constants import ResponseMethod, CallType, CallDirection
 from dataclasses import dataclass, field
 
 
@@ -20,10 +20,28 @@ class BotCall:
 
 @dataclass
 class CallSids:
-    outbound_bots: Dict[str, BotCall] = field(default_factory=dict)  # call_sid -> BotCall
-    inbound_bots: Dict[str, BotCall] = field(default_factory=dict)   # call_sid -> BotCall
-    customer_service: Optional[str] = None
-    user: Optional[str] = None
+    # Key can be (CallType, bool) if we need inbound/outbound, or just CallType
+    # if inbound/outbound is only relevant for BOT calls.
+    storage: Dict[Tuple[CallType, Optional[bool]], str] = None
+    call_type_to_direction: Dict[CallType, CallDirection] = None
+
+    def __post_init__(self):
+        if self.storage is None:
+            self.storage = {}
+        if self.call_type_to_direction is None:
+            self.call_type_to_direction = {}
+
+    def set_sid(self, call_type: CallType, call_sid: str, is_outbound: Optional[bool] = None):
+        self.storage[call_type] = call_sid
+        if is_outbound is not None:
+            self.call_type_to_direction[call_type] = CallDirection.OUTBOUND if is_outbound else CallDirection.INBOUND
+
+    def get_sid(self, call_type: CallType) -> Optional[str]:
+        key = call_type
+        return self.storage.get(key)
+    
+    def get_direction(self, call_type: CallType) -> Optional[CallDirection]:
+        return self.call_type_to_direction.get(call_type)
 
 @dataclass
 class MetaCallSids:

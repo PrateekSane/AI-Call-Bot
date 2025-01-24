@@ -30,21 +30,20 @@ class SessionData:
         self.time_created: datetime = datetime.now()
 
     # --- Conference SID ---
-    def set_call_sid(self, call_type: CallType, call_sid: str, is_outbound: bool):
+    def set_call_sid(self, call_type: CallType, call_sid: str, is_outbound: Optional[bool] = None):
         if call_type.is_bot_call:
-            if not is_outbound:
+            if is_outbound is None:
                 raise ValueError(f"is_outbound must be specified for bot calls")
-            call_direction = CallInfo.OUTBOUND_BOT_SID if is_outbound else CallInfo.INBOUND_BOT_SID
-            self.call_sids[call_direction][call_type] = call_sid
+            self.call_sids.set_sid(call_type, call_sid, is_outbound)
         elif call_type == CallType.USER:
-            self.call_sids.user = call_sid
+            self.call_sids.set_sid(call_type, call_sid)
         elif call_type == CallType.CUSTOMER_SERVICE:
-            self.call_sids.customer_service = call_sid
+            self.call_sids.set_sid(call_type, call_sid)
         else:
             raise ValueError(f"Invalid call type: {call_type}")
 
     def get_call_sid(self, call_type: CallType) -> Optional[str]:
-        return self.call_sids[call_type]
+        return self.call_sids.get_sid(call_type)
 
     # --- Call Metadata SIDs ---
     def set_twilio_stream_sid(self, twilio_stream_sid: str):

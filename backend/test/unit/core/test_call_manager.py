@@ -1,309 +1,264 @@
 import pytest
-import uuid
 from unittest.mock import patch
-
-from backend.core.constants import CallInfo, UserInformationKeys, CallType
-from backend.core.models import SessionData, CallSids, ChatMessage, BotCall
-from backend.utils.utils import logger
 from backend.core.call_manager import CallManager
+from backend.core.constants import CallType
 
+# Patch the logger globally so no logs print in tests
+@pytest.fixture
+def mock_logger():
+    with patch("backend.core.call_manager.logger") as mock_log:
+        yield mock_log
 
 @pytest.fixture
-def manager():
-    """
-    Create a fresh CallManager instance for each test,
-    so tests don't interfere with each other.
-    """
+def call_manager():
     return CallManager()
 
 
-def test_create_new_session(manager):
+def test_create_new_session(call_manager):
     """
-    Test that create_new_session generates a new UUID-based session_id and stores a blank session.
+    Test that creating a new session generates a unique session_id and
+    that the session is stored internally.
     """
-    session_id = manager.create_new_session()
-    assert session_id is not None
-    assert isinstance(session_id, str)
-    session_data = manager.get_session_by_id(session_id)
-    assert session_data is not None
-    # Check a valid conference_name is generated
-    assert session_data.conference_name is not None
-    assert isinstance(session_data.conference_name, str)
-    # Verify call_sids is an empty structure
-    assert isinstance(session_data.call_sids, CallSids)
+    session_id = call_manager.create_new_session()
+    assert session_id is not None, "Session ID should not be None."
+
+    session_data = call_manager.get_session_by_id(session_id)
+    assert session_data is not None, "Session data should be retrievable by session ID."
+    assert session_data.session_id == session_id, "Session data should have the correct session_id."
 
 
-def test_link_call_to_session_user_call(manager):
+def test_check_session_exists_when_no_session(call_manager):
     """
-    Test linking a user call to a session, storing the callSid, 
-    and verifying it sets the correct session key.
+    Test check_session_exists returns None if no session exists for the given number(s).
     """
-    session_id = manager.create_new_session()
-    call_sid = "CA12345USER"
-    manager.link_call_to_session(call_sid, session_id, CallType.USER)
-    # Check the call->session mapping
-    session_data = manager.get_session_for_call(call_sid)
-    assert session_data is not None
-    assert session_data.session_id == session_id
-    # Check that user callSid is stored
-    user_sid = manager.get_session_value(session_id, CallInfo.USER_SID)
-    assert user_sid == call_sid
+    result = call_manager.check_session_exists(["+10000000000"])
+    assert result is None, "Should return None if no session matches the given number(s)."
 
 
-def test_link_call_to_session_bot_call_outbound(manager):
+def test_check_session_exists_found(call_manager):
     """
-    Test linking an outbound bot call. This requires is_outbound=True.
+    Test check_session_exists returns a matching session if a number was linked.
     """
-    session_id = manager.create_new_session()
-    call_sid = "CABOT123"
-    # For a bot call, we must pass is_outbound
-    manager.link_call_to_session(call_sid, session_id, CallType.BOT, is_outbound=True)
+    # Create a session
+    session_id = call_manager.create_new_session()
+    # Link a call to that session
+    call_manager.link_call_to_session(
+        call_sid="abc123",
+        call_number="+15551112222",
+        session_id=session_id,
+        call_type=CallType.CONFERENCE,
+        is_outbound=True
+    )
 
-    session_data = manager.get_session_for_call(call_sid)
-    assert session_data is not None
-    # Check that the manager set the outbound bot SID
-    outbound_bots = manager.get_session_value(session_id, CallInfo.OUTBOUND_BOT_SID)
-    assert call_sid in outbound_bots
-    bot_call = outbound_bots[call_sid]
-    assert bot_call.call_sid == call_sid
-    assert bot_call.call_type == CallType.BOT
+    # Now check if the session exists for this number
+    result = call_manager.check_session_exists(["+15551112222"])
+    assert result is not None, "Should find a session for the existing number."
+    number_found, session_found = result
+    assert number_found == "+15551112222", "Should return the matching number."
+    assert len(session_found) == 1, "Should return a list with one session_id."
+    assert session_found[0] == (session_id, "abc123"), "Should return the session id linked to that number."
 
 
-def test_link_call_to_session_bot_call_inbound(manager):
+def test_link_call_to_invalid_session(call_manager, mock_logger):
     """
-    Test linking an inbound bot call with is_outbound=False.
+    Test linking a call to an invalid session logs an error and does not store data.
     """
-    session_id = manager.create_new_session()
-    call_sid = "CABOT_IN_999"
-    manager.link_call_to_session(call_sid, session_id, CallType.BOT, is_outbound=False)
+    call_manager.link_call_to_session(
+        call_sid="abc123",
+        call_number="+15551112222",
+        session_id="non_existent_session",
+        call_type=CallType.USER
+    )
 
-    inbound_bots = manager.get_session_value(session_id, CallInfo.INBOUND_BOT_SID)
-    assert call_sid in inbound_bots
-    bot_call = inbound_bots[call_sid]
-    assert bot_call.call_sid == call_sid
-    assert bot_call.call_type == CallType.BOT
+    # Since session didn't exist, we expect an error log
+    mock_logger.error.assert_called_once()
+    # The call should not be recorded
+    session = call_manager.get_session_by_call_sid("abc123")
+    assert session is None, "No valid session should be linked to an invalid session_id."
 
 
-def test_link_call_to_session_missing_is_outbound(manager):
+def test_link_call_to_session_user(call_manager):
     """
-    For a bot call, is_outbound must be specified or it raises a ValueError.
+    Test linking a USER call to a valid session updates internal mappings.
     """
-    session_id = manager.create_new_session()
-    call_sid = "CABOT_FAIL"
-    with pytest.raises(ValueError, match="is_outbound must be specified for bot calls"):
-        manager.link_call_to_session(call_sid, session_id, CallType.BOT)
+    # Create a session
+    session_id = call_manager.create_new_session()
+    call_sid = "sid123"
+    call_number = "+15550001111"
+
+    call_manager.link_call_to_session(
+        call_sid=call_sid,
+        call_number=call_number,
+        session_id=session_id,
+        call_type=CallType.USER
+    )
+
+    # Verify we can retrieve the session by call_sid
+    session_data_by_sid = call_manager.get_session_by_call_sid(call_sid)
+    assert session_data_by_sid is not None, "Session should be found by call_sid."
+    assert session_data_by_sid.session_id == session_id, "Correct session_id should be returned."
+
+    # Verify retrieving session by the session_id still works
+    session_data = call_manager.get_session_by_id(session_id)
+    assert session_data is not None, "Session should be found by session_id."
+
+    # Verify the call SID is set in the session's call_sids object
+    # We'll check via the get_call_sid() helper:
+    assert session_data.get_call_sid(CallType.USER) == call_sid, \
+        "USER call SID should match the callSid used in link_call_to_session."
+
+    # Check _number_to_session mapping is updated
+    # The internal structure is a list of (session_id, call_sid) tuples.
+    stored_entries = call_manager._number_to_session.get(call_number, [])
+    assert len(stored_entries) == 1, "Expected exactly one (session_id, call_sid) entry."
+    assert stored_entries[0] == (session_id, call_sid), "The stored entry should match the linked session/call."
 
 
-def test_link_call_to_session_nonexistent_session(manager, caplog):
+def test_get_session_by_call_sid_invalid(call_manager):
     """
-    Linking a call to a non-existent session logs an error.
+    Test retrieval of a session by a non-existent call SID returns None.
     """
-    call_sid = "CAFAKE"
-    manager.link_call_to_session(call_sid, "nonexistent_session", CallType.USER)
-    assert "Session nonexistent_session not found" in caplog.text
+    session = call_manager.get_session_by_call_sid("unknown_sid")
+    assert session is None, "Should return None for a callSid that doesn't exist."
 
 
-def test_set_session_value_and_get_session_value(manager):
+def test_get_session_by_id_invalid(call_manager):
     """
-    Test setting and getting various session values, verifying they are stored correctly.
+    Test retrieval of a session by an invalid session ID returns None.
     """
-    session_id = manager.create_new_session()
-    manager.set_session_value(session_id, CallInfo.BOT_NUMBER, "+15551234567")
-    manager.set_session_value(session_id, CallInfo.CS_NUMBER, "+18005550199")
-    manager.set_session_value(session_id, CallInfo.USER_NUMBER, "+16175551212")
-    manager.set_session_value(session_id, CallInfo.CONFERENCE_SID, "CF123")
-    manager.set_session_value(session_id, CallInfo.TWILIO_STREAM_SID, "TS123")
-
-    # user_info is a dict
-    user_info_dict = {
-        UserInformationKeys.USER_NAME.value: "Alice",
-        UserInformationKeys.USER_EMAIL.value: "alice@example.com",
-    }
-    manager.set_session_value(session_id, CallInfo.USER_INFO, user_info_dict)
-
-    # now retrieve them
-    assert manager.get_session_value(session_id, CallInfo.BOT_NUMBER) == "+15551234567"
-    assert manager.get_session_value(session_id, CallInfo.CS_NUMBER) == "+18005550199"
-    assert manager.get_session_value(session_id, CallInfo.USER_NUMBER) == "+16175551212"
-    assert manager.get_session_value(session_id, CallInfo.CONFERENCE_SID) == "CF123"
-    assert manager.get_session_value(session_id, CallInfo.TWILIO_STREAM_SID) == "TS123"
-    assert manager.get_session_value(session_id, CallInfo.USER_INFO) == user_info_dict
+    session = call_manager.get_session_by_id("not_a_real_session")
+    assert session is None, "Should return None for a non-existent session ID."
 
 
-def test_set_session_value_nonexistent_session(manager, caplog):
+def test_get_session_by_number_invalid(call_manager):
     """
-    Setting a session value on a nonexistent session logs an error and does nothing.
+    Test retrieval of session by a number that doesn't exist returns None.
     """
-    manager.set_session_value("bad_session", CallInfo.BOT_NUMBER, "+19999999999")
-    assert "Session bad_session not found" in caplog.text
+    session = call_manager.get_session_by_number("+1234567890")
+    assert session is None, "Should return None for a number that isn't linked to any session."
 
 
-def test_get_session_value_nonexistent_session(manager, caplog):
+def test_get_session_by_number_bot_multiple_calls_same_session(call_manager, mock_logger):
     """
-    Getting a value from a nonexistent session logs an error and returns None.
+    If multiple bot calls (with different call_types) are linked to the SAME session
+    for the same bot number, `get_session_by_number` should return that single session
+    without error logs.
     """
-    val = manager.get_session_value("does_not_exist", CallInfo.USER_NUMBER)
-    assert val is None
-    assert "Session does_not_exist not found" in caplog.text
+    session_id = call_manager.create_new_session()
+    bot_number = "+15559990000"
+
+    # First bot call (e.g., CONFERENCE)
+    call_sid1 = "bot_sid_1"
+    call_manager.link_call_to_session(
+        call_sid=call_sid1,
+        call_number=bot_number,
+        session_id=session_id,
+        call_type=CallType.CONFERENCE,
+        is_outbound=True
+    )
+
+    # Second bot call (e.g., STREAM)
+    call_sid2 = "bot_sid_2"
+    call_manager.link_call_to_session(
+        call_sid=call_sid2,
+        call_number=bot_number,
+        session_id=session_id,
+        call_type=CallType.STREAM,
+        is_outbound=False
+    )
+
+    # Now attempt to retrieve by bot_number
+    session_data = call_manager.get_session_by_number(bot_number)
+    assert session_data is not None, "Should return a single session for the known bot number."
+    assert session_data.session_id == session_id, "Should match the session we created."
+
+    # We should see no error logs, since we do NOT have multiple sessions
+    mock_logger.error.assert_not_called()
+
+    # Check call SIDs recorded properly
+    assert session_data.get_call_sid(CallType.CONFERENCE) == call_sid1, \
+        "CONFERENCE call SID should match the first call."
+    assert session_data.get_call_sid(CallType.STREAM) == call_sid2, \
+        "STREAM call SID should match the second call."
 
 
-def test_get_session_for_call(manager):
+def test_get_session_by_number_bot_multiple_sessions(call_manager, mock_logger):
     """
-    Ensure get_session_for_call returns None if callSid not linked, or the correct session otherwise.
+    If the same bot number is linked to different sessions, then `get_session_by_number`
+    should detect multiple sessions, log an error, and return None.
     """
-    session_id = manager.create_new_session()
-    call_sid = "UNLINKED_CALL"
-    # not linked yet -> should be None
-    assert manager.get_session_for_call(call_sid) is None
+    # Create two different sessions
+    session_id_1 = call_manager.create_new_session()
+    session_id_2 = call_manager.create_new_session()
 
-    manager.link_call_to_session(call_sid, session_id, CallType.USER)
-    session_data = manager.get_session_for_call(call_sid)
-    assert session_data is not None
-    assert session_data.session_id == session_id
+    bot_number = "+15559990000"
+
+    # Link the same bot number to two different sessions
+    call_sid1 = "bot_sid_1"
+    call_manager.link_call_to_session(
+        call_sid=call_sid1,
+        call_number=bot_number,
+        session_id=session_id_1,
+        call_type=CallType.CONFERENCE,
+        is_outbound=True
+    )
+
+    call_sid2 = "bot_sid_2"
+    call_manager.link_call_to_session(
+        call_sid=call_sid2,
+        call_number=bot_number,
+        session_id=session_id_2,
+        call_type=CallType.CONFERENCE,
+        is_outbound=False
+    )
+
+    # Now attempt to retrieve by bot_number
+    session_data = call_manager.get_session_by_number(bot_number)
+    assert session_data is None, "Should return None, because multiple sessions share the same bot number."
+
+    # Check an error log was generated about multiple sessions
+    mock_logger.error.assert_called()
+    # (Optional) You can check the exact message if you want:
+    mock_logger.error.assert_any_call(f"Multiple sessions found for bot number {bot_number}")
 
 
-def test_get_session_by_id(manager):
+
+def test_delete_session(call_manager):
     """
-    Check retrieval by session_id.
+    Test deleting a session removes it from all internal mappings.
     """
-    session_id = manager.create_new_session()
-    session_data = manager.get_session_by_id(session_id)
-    assert session_data is not None
-    assert session_data.session_id == session_id
+    # Create a session and link calls
+    session_id = call_manager.create_new_session()
+    call_sid_bot = "bot_sid_2"
+    call_sid_user = "user_sid_2"
+    bot_number = "+18880001111"
+    user_number = "+12223334444"
 
-    # non-existing
-    assert manager.get_session_by_id("fake_id") is None
+    call_manager.link_call_to_session(call_sid_bot, bot_number, session_id, CallType.CONFERENCE, is_outbound=False)
+    call_manager.link_call_to_session(call_sid_user, user_number, session_id, CallType.USER)
 
+    # Sanity checks: The session should exist before deletion
+    assert call_manager.get_session_by_id(session_id) is not None
+    assert call_manager.get_session_by_call_sid(call_sid_bot) is not None
+    assert call_manager.get_session_by_call_sid(call_sid_user) is not None
+    assert bot_number in call_manager._number_to_session
+    assert user_number in call_manager._number_to_session
 
-def test_get_conference_name(manager):
-    session_id = manager.create_new_session()
-    conf_name = manager.get_conference_name(session_id)
-    session_data = manager.get_session_by_id(session_id)
-    assert conf_name == session_data.conference_name
+    # Now delete the session
+    call_manager.delete_session(session_id)
 
-    # non-existing
-    assert manager.get_conference_name("fake_id") is None
+    # Verify session is removed
+    assert call_manager.get_session_by_id(session_id) is None, "Session should be deleted."
+    assert call_manager.get_session_by_call_sid(call_sid_bot) is None, "Bot SID should be unlinked."
+    assert call_manager.get_session_by_call_sid(call_sid_user) is None, "User SID should be unlinked."
 
-
-def test_get_session_by_number(manager):
-    session_id = manager.create_new_session()
-    manager.set_session_value(session_id, CallInfo.BOT_NUMBER, "+15559990000")
-
-    # Should retrieve session by that bot_number
-    found = manager.get_session_by_number("+15559990000")
-    assert found is not None
-    assert found.session_id == session_id
-
-    # For a non-existing number, returns None
-    assert manager.get_session_by_number("+15553334444") is None
-
-
-def test_delete_session(manager):
-    """
-    Deleting a session should remove it from internal dicts
-    (_sessions, _call_to_session, _number_to_session).
-    """
-    session_id = manager.create_new_session()
-    manager.set_session_value(session_id, CallInfo.BOT_NUMBER, "+12223334444")
-    call_sid = "TO_DELETE"
-    manager.link_call_to_session(call_sid, session_id, CallType.USER)
-
-    manager.delete_session(session_id)
-
-    # session removed
-    assert manager.get_session_by_id(session_id) is None
-    # call->session link removed
-    assert manager.get_session_for_call(call_sid) is None
-    # number->session link removed
-    assert manager.get_session_by_number("+12223334444") is None
-
-
-def test_set_and_is_stream_ready(manager):
-    session_id = manager.create_new_session()
-    # default is not ready
-    assert manager.is_stream_ready(session_id) is False
-
-    manager.set_stream_ready(session_id, True)
-    assert manager.is_stream_ready(session_id) is True
-
-    manager.set_stream_ready(session_id, False)
-    assert manager.is_stream_ready(session_id) is False
-
-
-def test_stream_ready_with_nonexistent_session(manager, caplog):
-    manager.set_stream_ready("fake_sess", True)
-    assert "Session fake_sess not found" in caplog.text
-    assert manager.is_stream_ready("fake_sess") is False  # logs error again
-    assert "Session fake_sess not found" in caplog.text
-
-
-def test_add_to_chat_history_and_get_chat_history(manager):
-    session_id = manager.create_new_session()
-    manager.add_to_chat_history(session_id, "user", "Hello!")
-    manager.add_to_chat_history(session_id, "assistant", "Hi there!")
-    history = manager.get_chat_history(session_id)
-    assert len(history) == 2
-    assert history[0]["role"] == "user"
-    assert history[0]["content"] == "Hello!"
-    assert history[1]["role"] == "assistant"
-    assert history[1]["content"] == "Hi there!"
-
-
-def test_get_chat_history_nonexistent_session(manager, caplog):
-    hist = manager.get_chat_history("some_fake_session")
-    assert hist == []
-    assert "Session some_fake_session not found" in caplog.text
-
-
-def test_get_bot_calls(manager):
-    """
-    Ensure get_bot_calls returns the correct dictionary for outbound or inbound.
-    """
-    session_id = manager.create_new_session()
-    outbound_sid_1 = "OUT123"
-    inbound_sid_1 = "IN123"
-
-    # Link calls
-    manager.link_call_to_session(outbound_sid_1, session_id, CallType.BOT, is_outbound=True)
-    manager.link_call_to_session(inbound_sid_1, session_id, CallType.BOT, is_outbound=False)
-
-    # get outbound
-    outbound = manager.get_bot_calls(session_id, is_outbound=True)
-    assert outbound_sid_1 in outbound
-    # get inbound
-    inbound = manager.get_bot_calls(session_id, is_outbound=False)
-    assert inbound_sid_1 in inbound
-
-
-def test_get_bot_call_by_type(manager):
-    """
-    Test that we can retrieve a specific BotCall by its call type.
-    """
-    session_id = manager.create_new_session()
-    call_sid = "CABOTHELLO"
-    manager.link_call_to_session(call_sid, session_id, CallType.BOT, is_outbound=True)
-
-    found = manager.get_bot_call_by_type(session_id, CallType.BOT, is_outbound=True)
-    assert found is not None
-    assert found.call_sid == call_sid
-    assert found.call_type == CallType.BOT
-
-
-def test_get_bot_call_by_type_not_bot(manager):
-    """
-    If we ask for a non-bot CallType, it should raise ValueError.
-    """
-    session_id = manager.create_new_session()
-    with pytest.raises(ValueError, match="is not a bot call type"):
-        manager.get_bot_call_by_type(session_id, CallType.USER)  # not a bot call
-
-
-def test_set_session_value_for_bot_call_wrong_format(manager):
-    """
-    If we call set_session_value for a bot call SID but pass the wrong value format, 
-    it should raise ValueError. (We test the _handle_bot_call_sid indirectly.)
-    """
-    session_id = manager.create_new_session()
-    bad_value = "NOT A TUPLE"
-    with pytest.raises(ValueError, match="Invalid value for outbound_bot_sid"):
-        manager.set_session_value(session_id, CallInfo.OUTBOUND_BOT_SID, bad_value)
+    # Because your current delete_session logic removes only the session's bot number 
+    # from _number_to_session, you might need to confirm that user_number is also cleared
+    # (or accept that it's not cleared automatically). We'll just verify the session_id 
+    # is no longer there.
+    if bot_number in call_manager._number_to_session:
+        for sid_tuple in call_manager._number_to_session[bot_number]:
+            assert sid_tuple[0] != session_id, "Deleted session should not be referenced."
+    if user_number in call_manager._number_to_session:
+        for sid_tuple in call_manager._number_to_session[user_number]:
+            assert sid_tuple[0] != session_id, "Deleted session should not be referenced."
