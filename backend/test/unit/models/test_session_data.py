@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 
-from backend.core.models import UserInformation, ChatMessage, CallType, MetaCallSids
+from backend.models.models import UserInformation, ChatMessage, CallType, MetaCallSids
 
 from backend.models.session_data import SessionData
 

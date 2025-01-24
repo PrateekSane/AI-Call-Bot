@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from backend.core.constants import CallInfo
 from backend.core.call_manager import CallManager
-from backend.core.models import UserInformation
+from backend.models.models import UserInformation
 from backend.services.openai_utils import invoke_gpt
 
 load_dotenv('../env/.env')

@@ -10,7 +10,7 @@ TUNNELS_JSON="$(curl -s ${NGROK_API})"
 NGROK_URL="$(echo "$TUNNELS_JSON" | jq -r '.tunnels[0].public_url')"
 
 # 3. Construct the endpoint you want to call
-ENDPOINT="${NGROK_URL}/initiate-call"
+ENDPOINT="${NGROK_URL}/calls/initiate-call"
 
 # Load the test case from the JSON file
 TEST_CASE="$(cat backend/test/test_cases.json | jq '.spotify_double_charge')"

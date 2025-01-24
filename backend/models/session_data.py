@@ -1,7 +1,7 @@
 from typing import Optional, List
 from datetime import datetime
 
-from backend.core.models import CallSids, UserInformation, ChatMessage, CallType,  MetaCallSids
+from backend.models.models import CallSids, UserInformation, ChatMessage, CallType,  MetaCallSids
 from backend.core.constants import CallInfo
 
 class SessionData:

@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 from backend.core.constants import CallType
 from backend.models.session_data import SessionData
-from backend.core.models import CallSids
+from backend.models.models import CallSids
 from backend.utils.utils import logger
 
 

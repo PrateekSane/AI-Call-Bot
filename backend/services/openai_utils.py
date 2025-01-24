@@ -4,7 +4,7 @@ from backend.utils.utils import logger
 from typing import List, Dict
 from backend.core.constants import CallInfo
 from backend.services.prompts import generate_system_prompt
-from backend.core.models import OpenAIResponseFormat
+from backend.models.models import OpenAIResponseFormat
 import json
 
 openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
