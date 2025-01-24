@@ -46,29 +46,30 @@ def get_openai_response(system_prompt: str, user_message: str, chat_history: Lis
         logger.error(f"OpenAI error: {e}")
         return "I encountered an error. Please hold."
 
-async def invoke_gpt(transcript, session_id, call_manager):
+async def invoke_gpt(transcript, session_id, call_manager) -> Dict:
     """Handle transcript from either websocket or test"""
     logger.info(f"[STT Transcript] {transcript}")
 
     # Get user info and generate prompt
-    user_info = call_manager.get_session_value(session_id, CallInfo.USER_INFO)
+    session_data = call_manager.get_session_by_id(session_id)
+    user_info = session_data.get_user_info().model_dump()
     system_prompt = generate_system_prompt(user_info)
-    
     # Add user message to history
-    call_manager.add_to_chat_history(session_id, "user", transcript)
+    session_data.add_to_chat_history("user", transcript)
     
     # Get chat history
-    chat_history = call_manager.get_chat_history(session_id)
+    chat_history = session_data.get_chat_history()
     
     # Get GPT response
     gpt_reply = get_openai_response(system_prompt, transcript, chat_history)
     try:
-        gpt_reply = json.loads(gpt_reply)
-        logger.info(f"[GPT Response] {gpt_reply}")
+        session_data.add_to_chat_history("assistant", gpt_reply)
+
+        gpt_reply_json = json.loads(gpt_reply)
+        logger.info(f"[GPT Response] {gpt_reply_json}")
     except Exception as e:
         logger.error(f"Error parsing GPT response: {e}")
         gpt_reply = {}
 
     # Add assistant response to history
-    call_manager.add_to_chat_history(session_id, "assistant", gpt_reply)
-    return gpt_reply
+    return gpt_reply_json

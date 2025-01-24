@@ -28,10 +28,11 @@ def generate_system_prompt(user_info: Dict[str, Any] = None) -> str:
     if not user_info:
         raise ValueError("User information is required")
     
+    print(user_info)
     # Ensure all required keys exist with defaults if missing
     for key in UserInformationKeys:
-        if key.value not in user_info and key.value != UserInformationKeys.ADDITIONAL_INFO.value:
-            raise KeyError(f"Missing required user information: {key.value}")
+        if key.value not in user_info and key.value != UserInformationKeys.ADDITIONAL_INFO:
+            raise KeyError(f"Missing required user information: {key}")
     
     # Format additional info if present
     additional_info_str = ""

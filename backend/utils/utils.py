@@ -30,19 +30,15 @@ def setup_logging():
     # Add console handler
     logger.add("stdout", level="INFO", format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}", colorize=True)
 
-    # You can configure loguru's output format globally:
-    logger.add(
-        "stdout", 
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}", 
-        level="INFO",
-        colorize=True
-    )
+    # Add terminal handler
+    logger.add(lambda msg: print(msg, end=''), level="INFO", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
 
     if __name__ == "__main__":
         logger.debug("Debug message")
         logger.info("Info message")
         logger.error("Error message")
 
+    return logger
 
     return logger
 

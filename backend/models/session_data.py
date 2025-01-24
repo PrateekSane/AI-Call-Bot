@@ -35,9 +35,7 @@ class SessionData:
             if is_outbound is None:
                 raise ValueError(f"is_outbound must be specified for bot calls")
             self.call_sids.set_sid(call_type, call_sid, is_outbound)
-        elif call_type == CallType.USER:
-            self.call_sids.set_sid(call_type, call_sid)
-        elif call_type == CallType.CUSTOMER_SERVICE:
+        elif call_type == CallType.USER or call_type == CallType.CUSTOMER_SERVICE:
             self.call_sids.set_sid(call_type, call_sid)
         else:
             raise ValueError(f"Invalid call type: {call_type}")
@@ -100,8 +98,8 @@ class SessionData:
         return self.ready_for_stream
 
     # --- Chat History ---
-    def add_chat_message(self, chat_message: ChatMessage):
-        self.chat_history.append(chat_message)
+    def add_to_chat_history(self, role: str, content: str):
+        self.chat_history.append(ChatMessage(role=role, content=content))
 
     def get_chat_history(self) -> List[ChatMessage]:
         return self.chat_history

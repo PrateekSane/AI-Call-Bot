@@ -23,6 +23,7 @@ from backend.services.openai_utils import invoke_gpt
 from backend.services.twilio_utils import create_call, create_conference, end_call
 from backend.utils.utils import logger, twilio_client
 from backend.core.constants import CallType
+from fastapi.websockets import WebSocketState
 
 load_dotenv('../env/.env')
 
@@ -45,15 +46,16 @@ async def initiate_call(request: InitiateCallRequest, req: Request):
     """
     try:
         # End any active calls from the same CS number
-        active_calls = twilio_client.calls.list(from_=request.cs_number, status="in-progress")
-        for call in active_calls:
-            twilio_client.calls(call.sid).update(status="completed")
-            logger.info(f"Ended existing in-progress call with SID: {call.sid}")
+        active_calls = twilio_client.calls.list(from_=request.bot_number, status="in-progress")
+        if active_calls:
+            for call in active_calls:
+                twilio_client.calls(call.sid).update(status="completed")
+                logger.info(f"Ended existing in-progress call with SID: {call.sid}")
         host = req.url.hostname
-
         # Garuntee that no existing session for the given numbers
-        number, existing_session = call_manager.check_session_exists([request.cs_number, request.bot_number, request.user_number])
-        if existing_session:
+        existing_sessions = call_manager.check_session_exists([request.cs_number, request.bot_number, request.user_number])
+        if existing_sessions:
+            number, existing_session = existing_sessions
             logger.error(f"Session already exists for {number}. Cleaning up")
             call_manager.delete_session(existing_session)
 
@@ -265,8 +267,8 @@ def handle_dial_user(call_url: str, session_id: str):
 
 async def handle_stt_transcript(transcript: str, session_id: str, stream_sid: Optional[str], websocket: Optional[WebSocket]):
     """Pass transcript to GPT, parse the response, and act accordingly."""
-    gpt_reply = await invoke_gpt(transcript, session_id, call_manager)
     try:
+        gpt_reply = await invoke_gpt(transcript, session_id, call_manager)
         match gpt_reply["response_method"]:
             case ResponseMethod.NOOP.value:
                 logger.info("No operation needed, skipping TTS. Sleeping for 5 seconds")
@@ -286,6 +288,10 @@ async def handle_stt_transcript(transcript: str, session_id: str, stream_sid: Op
                 logger.error(f"Unknown response method: {gpt_reply['response_method']}")
     except Exception as e:
         logger.error(f"Error handling voice response: {e}")
+    
+async def close_websocket(websocket: WebSocket):
+    if websocket.client_state == WebSocketState.CONNECTED:
+        await websocket.close()
 
 
 @app.websocket("/media-stream/{session_id}")
@@ -305,13 +311,13 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     session_data = call_manager.get_session_by_id(session_id)
     if not session_data:
         logger.error(f"Session {session_id} not found")
-        await twilio_websocket.close()
+        await close_websocket(twilio_websocket)
         return
 
     while not session_data.is_ready_for_stream():
         if asyncio.get_event_loop().time() - start_time > timeout:
             logger.info("Timeout waiting for session to be ready")
-            await twilio_websocket.close()
+            await close_websocket(twilio_websocket)
             return
         await asyncio.sleep(1)
 
@@ -329,7 +335,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
     stt_dg_connection = await create_deepgram_stt_connection(on_transcript)
     if stt_dg_connection is None:
         logger.error("Failed to open Deepgram STT. Closing Twilio WS.")
-        await twilio_websocket.close()
+        await close_websocket(twilio_websocket)
         return
 
     try:
@@ -361,7 +367,7 @@ async def handle_media_stream(twilio_websocket: WebSocket, session_id: str):
         logger.error(f"Error reading Twilio WS: {e}")
     finally:
         await close_deepgram_stt_connection(stt_dg_connection)
-        await twilio_websocket.close()
+        await close_websocket(twilio_websocket)
         logger.info("Closed Twilio WS and Deepgram STT connection.")
 
 
@@ -461,7 +467,11 @@ async def call_events(request: Request):
             return '', 200
 
         # Compare the callSid to session_data's known call SIDs
-        cs_sid = session_data.call_sids.customer_service
+        cs_sid = session_data.call_sids.get_sid(CallType.CUSTOMER_SERVICE)
+        if not cs_sid:
+            logger.error(f"No customer service call SID found for session {session_data.session_id}")
+            return '', 404
+
         if event_type == TwilioCallStatus.IN_PROGRESS.value:
             logger.debug(f"Call in progress: {call_sid}")
             if call_sid == cs_sid:
