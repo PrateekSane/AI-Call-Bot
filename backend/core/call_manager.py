@@ -29,6 +29,14 @@ class CallManager:
             
             self._sessions[session_id] = session_data
             return session_id
+        
+    def check_session_exists(self, call_numbers: list[str]) -> Optional[str]:
+        """Check if a session exists for the given call number."""
+        with self._lock:
+            for call_number in call_numbers:
+                if call_number in self._number_to_session:
+                    return call_number, self._number_to_session[call_number]
+            return None
 
     def link_call_to_session(self, call_sid: str, call_number: str, session_id: str, call_type: CallType, is_outbound: Optional[bool] = None):
         """

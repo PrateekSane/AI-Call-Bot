@@ -1,7 +1,8 @@
 from typing import Optional, List
 from datetime import datetime
 
-from backend.core.models import CallSids, UserInformation, ChatMessage, CallType, CallInfo, MetaCallSids
+from backend.core.models import CallSids, UserInformation, ChatMessage, CallType,  MetaCallSids
+from backend.core.constants import CallInfo
 
 class SessionData:
     """
@@ -31,7 +32,7 @@ class SessionData:
     # --- Conference SID ---
     def set_call_sid(self, call_type: CallType, call_sid: str, is_outbound: bool):
         if call_type.is_bot_call:
-            if is_outbound is None:
+            if not is_outbound:
                 raise ValueError(f"is_outbound must be specified for bot calls")
             call_direction = CallInfo.OUTBOUND_BOT_SID if is_outbound else CallInfo.INBOUND_BOT_SID
             self.call_sids[call_direction][call_type] = call_sid

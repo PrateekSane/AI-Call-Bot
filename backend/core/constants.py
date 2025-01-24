@@ -1,8 +1,6 @@
 from enum import Enum
 
 
-
-
 class UserInformationKeys(Enum):
     USER_NAME = 'user_name'
     USER_EMAIL = 'user_email'
