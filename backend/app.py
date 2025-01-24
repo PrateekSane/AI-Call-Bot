@@ -3,8 +3,8 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from backend.routes.call_routes import call_router
-from backend.routes.conference_routes import conference_router
+from backend.routes.call_router import call_router
+from backend.routes.conference_router import conference_router
 from backend.routes.media_router import media_router
 
 load_dotenv('../env/.env')

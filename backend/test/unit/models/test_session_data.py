@@ -152,12 +152,12 @@ def test_add_chat_message_and_get_chat_history(session_data):
     msg1 = ChatMessage(role="user", content="Hello")
     msg2 = ChatMessage(role="bot", content="Hi there!")
     
-    session_data.add_chat_message(msg1)
-    session_data.add_chat_message(msg2)
+    session_data.add_to_chat_history("user", "Hello")
+    session_data.add_to_chat_history("assistant", "Hi there!")
     
     history = session_data.get_chat_history()
     assert len(history) == 2
     assert history[0].role == "user"
     assert history[0].content == "Hello"
-    assert history[1].role == "bot"
+    assert history[1].role == "assistant"
     assert history[1].content == "Hi there!"

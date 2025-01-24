@@ -1,5 +1,6 @@
 env/
 __pycache__/
+.pytest_cache/
 app.log
 ngrok_addresses.json
 .vscode/

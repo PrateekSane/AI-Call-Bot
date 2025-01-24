@@ -61,6 +61,7 @@ class InitiateCallRequest(BaseModel):
     cs_number: str = Field(..., pattern=r'^\+\d{11}$')
     user_number: str = Field(..., pattern=r'^\+\d{11}$')
     user_info: UserInformation 
+    poopballsack:str = "poopballsack"
 
 
 class OpenAIResponseFormat(BaseModel):
