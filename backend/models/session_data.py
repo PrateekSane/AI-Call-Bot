@@ -10,17 +10,17 @@ class SessionData:
     A regular class with an explicit constructor, plus getters/setters.
     """
 
-    def __init__(self, session_id: str, conference_name: str):
+    def __init__(self, session_id: str, conference_name: str, user_info: Optional[UserInformation] = None):
         # Required fields
         self.session_id = session_id
         self.conference_name = conference_name
+        self.user_info: Optional[UserInformation] = user_info
 
         # Optional fields
         self.meta_call_sids: Optional[MetaCallSids] = None
         self.bot_number: Optional[str] = None
         self.cs_number: Optional[str] = None
         self.user_number: Optional[str] = None
-        self.user_info: Optional[UserInformation] = None
         self.ready_for_stream: bool = False
 
         # Call SIDs and chat messages default to empty structures

@@ -93,42 +93,57 @@ def test_get_openai_response_exception(mock_logger, mock_openai_client):
 @pytest.mark.asyncio
 async def test_invoke_gpt_success(mock_logger, mock_openai_client):
     """
-    Test that invoke_gpt fetches user info, constructs system prompt,
+    Test that invoke_gpt fetches user info, constructs a system prompt,
     calls get_openai_response, and parses JSON from the GPT reply.
+    Also confirm that session_data.add_to_chat_history is used (i.e.,
+    the chat history is appended to the SessionData object).
     """
-    # Mock the call manager
-    call_manager = MagicMock()
-    call_manager.get_session_by_id.return_value = SessionData(
+
+    # 1. Create a SessionData object with empty or initial chat_history:
+    session_data = SessionData(
         session_id="session123",
         conference_name="conference123",
         user_info=UserInformation(
             user_name="Alice",
-            user_number="1234567890"
-        )
+            user_email="alice@example.com",
+            account_number="1234567890",
+            reason_for_call="I need help with my account"
+        ),
     )
-    call_manager.get_chat_history.return_value = [
-        {"role": "user", "content": "Hello, GPT!"}
-    ]
 
-    # We'll also patch the generate_system_prompt function if it lives in backend.services.prompts
+    # 2. Mock the call_manager so that get_session_by_id returns our session_data
+    call_manager = MagicMock()
+    call_manager.get_session_by_id.return_value = session_data
+
+    # 3. Mock generate_system_prompt if needed
     with patch("backend.services.openai_utils.generate_system_prompt", return_value="system prompt"):
-        # Mock the openai_client response to be valid JSON
+        # 4. Mock the openai_client response to be valid JSON
         gpt_reply_dict = {"response_method": "voice", "response_content": "This is some TwilioResponse content"}
         mock_openai_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(refusal=None, content=json.dumps(gpt_reply_dict)))]
         )
 
+        # 5. Invoke the function under test
         result = await invoke_gpt("Hello GPT!", "session123", call_manager)
-
-        # Check we got the JSON as a dict
         assert result == gpt_reply_dict
 
-    # Ensure call_manager usage
-    call_manager.get_session_by_id.assert_called_once()
-    call_manager.add_to_chat_history.assert_any_call("session123", "user", "Hello GPT!")
-    call_manager.add_to_chat_history.assert_any_call("session123", "assistant", gpt_reply_dict)
+    # 6. We expect session_data.add_to_chat_history to have appended two entries:
+    #    - The user prompt ("Hello GPT!")
+    #    - The GPT response (gpt_reply_dict)
 
-    # No error logs
+    # Verify call_manager usage
+    call_manager.get_session_by_id.assert_called_once_with("session123")
+    
+    # Now check that the session_data’s chat_history was updated
+    assert len(session_data.chat_history) == 2
+
+    assert session_data.chat_history[0].role == "user"
+    assert session_data.chat_history[0].content == "Hello GPT!"
+
+    assert session_data.chat_history[1].role == "assistant"
+    assert session_data.chat_history[1].content == json.dumps(gpt_reply_dict)
+
+    # Finally, ensure no error logs
     mock_logger.error.assert_not_called()
 
 
@@ -137,26 +152,31 @@ async def test_invoke_gpt_json_parse_error(mock_logger, mock_openai_client):
     """
     Test that invoke_gpt logs an error if the GPT response is not valid JSON.
     """
-    call_manager = MagicMock()
-    call_manager.get_session_by_id.return_value = SessionData(
+    # Create a SessionData object with valid UserInformation
+    session_data = SessionData(
         session_id="session123",
         conference_name="conference123",
         user_info=UserInformation(
             user_name="Alice",
             user_email="alice@example.com",
-            user_phone="1234567890"
-        )
+            account_number="1234567890",
+            reason_for_call="I need help with my account"
+        ),
     )
-    call_manager.get_chat_history.return_value = []
-    
-    # Return non-JSON content
+
+    call_manager = MagicMock()
+    call_manager.get_session_by_id.return_value = session_data
+
+    # Return non-JSON content from the mocked OpenAI call
     mock_openai_client.chat.completions.create.return_value = MagicMock(
         choices=[MagicMock(message=MagicMock(refusal=None, content="Invalid JSON"))]
     )
 
     with patch("backend.services.openai_utils.generate_system_prompt", return_value="system prompt"):
         result = await invoke_gpt("Some text", "session123", call_manager)
-        assert result == {}  # Because we failed to parse JSON
+        # Because we failed to parse JSON, we expect an empty dict
+        assert result == {}
 
+    # Confirm we logged an error
     mock_logger.error.assert_called_once()
     assert "Error parsing GPT response:" in mock_logger.error.call_args[0][0]
